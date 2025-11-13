@@ -8,22 +8,22 @@ import DeviceSelector from '@components/DeviceSelector';
 // import AudioVisualizer from '@components/AudioVisualizer';
 import { useCallStore } from '@store/callStore';
 import SpeakingAvatar from '@components/SpeakingAvatar';
-// import { RealtimeClient } from '@rtc/RealtimeClient';
 import { RealtimeWsClient } from '@rtc/RealtimeWsClient';
 import { AudioStreamer } from '@rtc/AudioStreamer';
-import { PcmPlayer } from '@rtc/PcmPlayer';
+import { Pcm24Player } from '@rtc/PcmPlayer';
 
 const { Title, Text } = Typography;
+
+function eid() { return 'event_' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
 export default function App() {
   const { message } = AntdApp.useApp();
   const { status, setStatus } = useCallStore();
   const [latencyMs] = useState<number | null>(null);
-  // const clientRef = useRef<RealtimeClient | null>(null);
   const wsRef = useRef<RealtimeWsClient | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamerRef = useRef<AudioStreamer | null>(null);
-  const playerRef = useRef<PcmPlayer | null>(null);
+  const playerRef = useRef<Pcm24Player | null>(null);
+  const sessionReadyRef = useRef(false);
 
   const statusInfo = useMemo(() => {
     switch (status) {
@@ -45,86 +45,75 @@ export default function App() {
   async function startCall() {
     try {
       setStatus('connecting');
-      // Switch to WS proxy path for 302.ai
+
+      const sess = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'qwen3-omni-flash-realtime', voice: 'Cherry' }) }).then(r => r.json());
+
       const ws = new RealtimeWsClient({
         onOpen: () => {
-          // Configure Realtime session (modalities, formats, voice)
-          wsRef.current?.sendJson({
-            type: 'session.update',
-            session: {
-              model: 'gpt-4o-realtime-preview-2024-12-17',
-              voice: 'alloy',
-              modalities: ['audio', 'text'],
-              input_audio_format: 'pcm16',
-              output_audio_format: 'pcm16',
-            },
-          });
           setStatus('listening');
           message.success('已连接实时服务');
         },
         onClose: (code) => {
-          const current = useCallStore.getState().status;
-          if (current === 'connecting') {
-            // handshake failed → 回退到空闲并提示
-            message.error('实时服务连接失败');
-            setStatus('idle');
-          } else if (current === 'listening' || current === 'thinking' || current === 'speaking') {
-            message.warning('实时服务已断开');
-            setStatus('idle');
-          } else {
-            setStatus('ended');
-          }
+          message.warning(`实时服务断开${code ? ` (code ${code})` : ''}`);
+          setStatus('idle');
         },
         onError: () => {
           message.error('实时服务连接出错');
           setStatus('idle');
         },
-        onMessage: (msg) => {
+        onMessage: async (msg) => {
           try {
-            // Debug log to help integration
-            // eslint-disable-next-line no-console
-            console.debug('realtime message', msg);
-            if (msg?.type === 'response.delta' && msg?.delta?.text) {
-              useCallStore.getState().addSubtitle({ role: 'assistant', text: msg.delta.text });
-            } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
-              // base64 pcm16 chunk
-              const player = (playerRef.current ??= new PcmPlayer());
-              if (msg?.sample_rate_hz) {
-                player.setSampleRateHz(msg.sample_rate_hz);
+            if (msg?.type === 'session.created') {
+              // now update session
+              wsRef.current?.sendJson({
+                type: 'session.update',
+                event_id: eid(),
+                session: {
+                  modalities: ['text', 'audio'],
+                  voice: sess.realtime?.voice || 'Cherry',
+                  input_audio_format: 'pcm16',
+                  output_audio_format: 'pcm24',
+                  turn_detection: { type: 'server_vad', threshold: 0.5, silence_duration_ms: 800 },
+                },
+              });
+            } else if (msg?.type === 'session.updated') {
+              // start mic streaming only after session is updated
+              if (!sessionReadyRef.current) {
+                sessionReadyRef.current = true;
+                const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const streamer = new AudioStreamer({ sendJson: (payload) => wsRef.current?.sendJson(payload), mode: 'vad' });
+                streamerRef.current = streamer;
+                await streamer.start(mic);
               }
-              player.playBase64Pcm16(msg.delta);
-            } else if ((msg?.type?.includes?.('transcript') || msg?.type === 'input_audio_buffer.transcript.delta') && msg?.delta?.text) {
-              useCallStore.getState().addSubtitle({ role: 'user', text: msg.delta.text });
-            } else if (msg?.type === 'response.completed') {
-              streamerRef.current?.markResponseCompleted();
+            } else if (msg?.type === 'response.audio_transcript.delta' && msg?.delta) {
+              useCallStore.getState().addSubtitle({ role: 'assistant', text: msg.delta });
+              setStatus('speaking');
+            } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
+              (playerRef.current ??= new Pcm24Player()).playBase64Pcm24(msg.delta);
+            } else if (msg?.type === 'upstream.close') {
+              message.warning(`上游关闭: code=${msg.code} reason=${msg.reason || ''}`);
+              setStatus('idle');
+            } else if (msg?.type === 'error') {
+              message.error(msg?.error?.message || '模型错误');
+              setStatus('idle');
             }
           } catch {}
         },
       });
       wsRef.current = ws;
-      ws.connect('gpt-4o-realtime-preview-2024-12-17', 'alloy');
-
-      // Start mic streaming (PCM16 → ws)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const streamer = new AudioStreamer({
-        sendJson: (payload) => wsRef.current?.sendJson(payload),
-        onError: (e) => console.error('audio streamer error', e),
-      });
-      streamerRef.current = streamer;
-      await streamer.start(stream);
+      ws.connect(sess.realtime?.model || 'qwen3-omni-flash-realtime', sess.realtime?.voice || 'Cherry');
     } catch (e: any) {
       console.error(e);
-      const detail = e?.message ? `：${e.message}` : '';
-      message.error(`建立语音连接失败，请检查后端与网络设置${detail}`);
+      message.error(`建立连接失败：${e.message || '未知错误'}`);
       setStatus('idle');
     }
   }
 
   async function hangup() {
     try {
-      // await clientRef.current?.disconnect();
       wsRef.current?.close();
       await streamerRef.current?.stop();
+      sessionReadyRef.current = false;
     } finally {
       setStatus('ended');
     }
@@ -154,8 +143,6 @@ export default function App() {
               <>
                 <SpeakingAvatar status={status} />
                 <SubtitlePanel />
-                {/* Keep waveform optional; can be enabled later */}
-                {/* <AudioVisualizer /> */}
               </>
             )}
           </Flex>
@@ -168,8 +155,6 @@ export default function App() {
       </Space>
       {/* Floating bottom controls (during call) */}
       {status !== 'idle' && status !== 'ended' ? <ControlBar onHangup={hangup} /> : null}
-      {/* Hook hangup: intercept button from ControlBar via global status change */}
-      {status === 'ended' ? null : null}
     </Flex>
   );
 }

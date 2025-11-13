@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import sessionRouter from './routes/session';
 import logsRouter from './routes/logs';
-import webrtcRouter from './routes/webrtc';
 import http from 'http';
 import { setupWsProxy } from './ws/proxy';
 
@@ -19,7 +18,6 @@ app.get('/health', (_req, res) => {
 
 app.use('/session', sessionRouter);
 app.use('/logs', logsRouter);
-app.use('/webrtc', webrtcRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

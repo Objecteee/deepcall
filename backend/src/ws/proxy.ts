@@ -1,64 +1,63 @@
 import type { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { URL } from 'url';
-
-type Query = { model?: string; voice?: string };
 
 export function setupWsProxy(server: Server) {
   const wss = new WebSocketServer({ server, path: '/realtime/ws' });
 
   wss.on('connection', async (client, req) => {
     try {
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = process.env.DASHSCOPE_API_KEY || process.env.OPENAI_API_KEY; // allow reuse if user sets OPENAI_API_KEY
       if (!apiKey) {
         client.close(1011, 'missing api key');
         return;
       }
 
-      const u = new URL(req.url || '', 'http://localhost');
-      const model = (u.searchParams.get('model') || 'gpt-4o-realtime-preview-2024-12-17').trim();
-      const voice = (u.searchParams.get('voice') || 'alloy').trim();
+      const url = new URL(req.url || '', 'http://localhost');
+      const model = (url.searchParams.get('model') || process.env.REALTIME_MODEL || 'qwen3-omni-flash-realtime').trim();
+      const base = process.env.REALTIME_BASE || 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime';
+      const upstreamUrl = `${base}?model=${encodeURIComponent(model)}`;
 
-      const base = process.env.REALTIME_BASE || 'wss://api.302.ai/v1/realtime';
-      const upstreamUrl = `${base}?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`;
-      const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-      let agent: any = undefined;
-      if (proxyUrl) {
-        const { HttpsProxyAgent } = await import('https-proxy-agent');
-        agent = new HttpsProxyAgent(proxyUrl);
-      }
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${apiKey}`,
+      };
 
-      // Some providers expect a subprotocol; include common OpenAI realtime ones (harmless if ignored)
-      const protocols = ['openai-realtime-v1', 'openai-realtime', 'openai-insecure-websocket-protocol', 'realtime'];
-      const upstream = new WebSocket(upstreamUrl, protocols, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'OpenAI-Beta': 'realtime=v1',
-          // Some CDNs require a non-empty Origin for WSS
-          Origin: 'https://localhost',
-          'User-Agent': 'DeepCall/1.0',
-          'Accept': '*/*',
-        },
-        agent,
+      const upstream = new WebSocket(upstreamUrl, { headers });
+
+      let pingTimer: NodeJS.Timeout | null = null;
+
+      upstream.on('open', () => {
+        // keepalive to prevent idle close
+        pingTimer = setInterval(() => {
+          try { (upstream as any).ping?.(); } catch {}
+        }, 20000);
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'upstream.open' }));
+        }
       });
 
-      // Wire events
-      upstream.on('open', () => client.send(JSON.stringify({ type: 'upstream.open' })));
       upstream.on('message', (data, isBinary) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(data, { binary: isBinary });
         }
       });
+
       upstream.on('error', (err) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'upstream.error', message: (err as any)?.message || 'error' }));
-        }
-        client.close(1011, 'upstream error');
+        try {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'upstream.error', message: (err as any)?.message || 'error' }));
+          }
+          client.close(1011, 'upstream error');
+        } catch {}
       });
+
       upstream.on('close', (code, reason) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.close(code, reason.toString());
-        }
+        try {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'upstream.close', code, reason: reason.toString() }));
+            client.close(code, reason.toString());
+          }
+        } catch {}
+        if (pingTimer) clearInterval(pingTimer);
       });
 
       client.on('message', (data, isBinary) => {
@@ -66,22 +65,18 @@ export function setupWsProxy(server: Server) {
           upstream.send(data, { binary: isBinary });
         }
       });
+
       client.on('close', () => {
-        if (upstream.readyState === WebSocket.OPEN) {
-          upstream.close();
-        }
+        try { if (upstream.readyState === WebSocket.OPEN) upstream.close(); } catch {}
+        if (pingTimer) clearInterval(pingTimer);
       });
+
       client.on('error', () => {
-        if (upstream.readyState === WebSocket.OPEN) {
-          upstream.close();
-        }
+        try { if (upstream.readyState === WebSocket.OPEN) upstream.close(); } catch {}
+        if (pingTimer) clearInterval(pingTimer);
       });
-    } catch (err) {
-      try {
-        client.close(1011, 'proxy init error');
-      } catch {}
+    } catch {
+      try { client.close(1011, 'proxy init error'); } catch {}
     }
   });
 }
-
-

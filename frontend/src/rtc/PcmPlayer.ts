@@ -1,10 +1,9 @@
-export class PcmPlayer {
+export class Pcm24Player {
   private ctx: AudioContext | null = null;
-  private defaultSampleRate = 24000;
-  private queueTime = 0; // seconds, scheduled playback cursor
-  private currentSampleRate = this.defaultSampleRate;
+  private queueTime = 0;
+  private sampleRate = 24000; // DashScope output_audio_format pcm24 default 24kHz per doc
 
-  async ensureContext() {
+  private async ensure() {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       await this.ctx.resume();
@@ -13,40 +12,35 @@ export class PcmPlayer {
   }
 
   setSampleRateHz(sr: number) {
-    if (sr && sr > 0) this.currentSampleRate = sr;
+    if (sr && sr > 0) this.sampleRate = sr;
   }
 
-  async playBase64Pcm16(b64: string, sampleRate = this.currentSampleRate) {
-    await this.ensureContext();
+  async playBase64Pcm24(b64: string) {
+    await this.ensure();
     const bytes = this.base64ToBytes(b64);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const samples = view.byteLength / 2;
-    const floatData = new Float32Array(samples);
-    for (let i = 0; i < samples; i++) {
-      const s = view.getInt16(i * 2, true);
-      floatData[i] = s / 0x8000;
+    // 24-bit little-endian to float32
+    const sampleCount = Math.floor(bytes.length / 3);
+    const floatData = new Float32Array(sampleCount);
+    for (let i = 0, o = 0; i < sampleCount; i++, o += 3) {
+      // compose 24-bit signed int (little endian)
+      let v = (bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16));
+      if (v & 0x800000) v |= ~0xffffff; // sign extend
+      floatData[i] = Math.max(-1, Math.min(1, v / 0x7fffff));
     }
-    const buffer = this.ctx!.createBuffer(1, floatData.length, sampleRate);
+    const buffer = this.ctx!.createBuffer(1, floatData.length, this.sampleRate);
     buffer.copyToChannel(floatData, 0);
     const src = this.ctx!.createBufferSource();
     src.buffer = buffer;
     src.connect(this.ctx!.destination);
-    const now = this.ctx!.currentTime;
-    // schedule sequential playback to avoid gaps/overlap
-    const startAt = Math.max(now, this.queueTime);
+    const startAt = Math.max(this.ctx!.currentTime, this.queueTime);
     src.start(startAt);
     this.queueTime = startAt + buffer.duration;
   }
 
   private base64ToBytes(b64: string): Uint8Array {
-    const binaryString = atob(b64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
   }
 }
-
-

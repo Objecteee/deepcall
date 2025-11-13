@@ -15,7 +15,7 @@ export class RealtimeWsClient {
 
   connect(model: string, voice: string) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/realtime/ws?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`;
+    const url = `${proto}://${location.host}/realtime/ws?model=${encodeURIComponent(model)}`;
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
     this.ws.onopen = () => this.events.onOpen?.();
@@ -39,11 +39,7 @@ export class RealtimeWsClient {
   }
 
   close() {
-    try {
-      this.ws?.close();
-    } catch {}
+    try { this.ws?.close(); } catch {}
     this.ws = null;
   }
 }
-
-
