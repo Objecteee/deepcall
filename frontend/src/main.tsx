@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App as AntdApp, ConfigProvider, theme } from 'antd';
 import 'antd/dist/reset.css';
+import './styles/global.css';
 import App from './App';
 
 const { defaultAlgorithm, darkAlgorithm } = theme;

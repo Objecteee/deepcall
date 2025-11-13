@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import sessionRouter from './routes/session.js';
-import logsRouter from './routes/logs.js';
+import sessionRouter from './routes/session';
+import logsRouter from './routes/logs';
+import webrtcRouter from './routes/webrtc';
+import http from 'http';
+import { setupWsProxy } from './ws/proxy';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -16,13 +19,16 @@ app.get('/health', (_req, res) => {
 
 app.use('/session', sessionRouter);
 app.use('/logs', logsRouter);
+app.use('/webrtc', webrtcRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(500).json({ ok: false, error: 'internal_error' });
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+setupWsProxy(server);
+server.listen(PORT, () => {
   console.log(`DeepCall backend listening on http://localhost:${PORT}`);
 });
 

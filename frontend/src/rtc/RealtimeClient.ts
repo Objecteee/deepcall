@@ -29,23 +29,22 @@ export class RealtimeClient {
     }
   }
 
-  async connect(ephemeralToken: string, model: string, voice: string) {
+  async connectViaBackend(model: string, voice: string) {
     if (!this.pc) throw new Error('PeerConnection not initialized');
     this.events.onStateChange?.('connecting');
     const offer = await this.pc.createOffer({ offerToReceiveAudio: true });
     await this.pc.setLocalDescription(offer);
 
-    const sdpAnswer = await fetch(
-      `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}&voice=${encodeURIComponent(voice)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ephemeralToken}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp ?? '',
-      }
-    ).then((r) => r.text());
+    const res = await fetch('/webrtc/offer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sdp: offer.sdp, model, voice }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`offer failed: ${res.status} ${errText}`);
+    }
+    const sdpAnswer = await res.text();
 
     await this.pc.setRemoteDescription({ type: 'answer', sdp: sdpAnswer });
     this.events.onStateChange?.('listening');

@@ -1,6 +1,7 @@
 import { Button } from 'antd';
 import { motion } from 'framer-motion';
 import { ReactNode } from 'react';
+import { PhoneFilled } from '@ant-design/icons';
 
 type Props = {
   onStart: () => void;
@@ -17,13 +18,13 @@ export default function CallButton({ onStart, label = '开始通话', icon }: Pr
     >
       <Button
         type="primary"
-        shape="round"
+        shape="circle"
         size="large"
-        icon={icon}
+        icon={icon ?? <PhoneFilled />}
         onClick={onStart}
-        style={{ padding: '20px 28px', fontSize: 18 }}
+        style={{ width: 88, height: 88, fontSize: 22, display: 'grid', placeItems: 'center' }}
       >
-        {label}
+        {/* no text to keep it minimal like ChatGPT */}
       </Button>
     </motion.div>
   );

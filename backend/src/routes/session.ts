@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createEphemeralToken } from '../services/openai.js';
+import { createEphemeralToken } from '../services/openai';
 
 const router = Router();
 

@@ -1,20 +1,22 @@
-import { Card, Typography } from 'antd';
+import { Card } from 'antd';
 import { useCallStore } from '@store/callStore';
-
-const { Paragraph } = Typography;
 
 export default function SubtitlePanel() {
   const { subtitles } = useCallStore();
   return (
-    <Card size="small" style={{ maxHeight: 280, overflow: 'auto' }}>
+    <Card size="small" className="glass-card" styles={{ body: { maxHeight: 340, overflow: 'auto' } }}>
       {subtitles.length === 0 ? (
-        <Paragraph type="secondary">等待语音...</Paragraph>
+        <div style={{ color: '#94a3b8' }}>等待语音...</div>
       ) : (
-        subtitles.map((s, i) => (
-          <Paragraph key={i} style={{ marginBottom: 8 }}>
-            <strong>{s.role === 'user' ? '你' : 'AI'}：</strong> {s.text}
-          </Paragraph>
-        ))
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {subtitles.map((s, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: s.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div className={`bubble ${s.role === 'user' ? 'bubble-user' : 'bubble-assistant'}`}>
+                {s.text}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </Card>
   );

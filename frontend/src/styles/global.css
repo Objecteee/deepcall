@@ -1,0 +1,71 @@
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.4);
+}
+
+/* Glass card effect */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+/* Floating controls bottom center */
+.floating-controls {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+}
+
+/* Pulse ring around speaking avatar */
+.pulse-ring {
+  position: relative;
+}
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.35);
+  animation: pulse 1.8s ease-out infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.35);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 16px rgba(59, 130, 246, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* Chat bubbles */
+.bubble {
+  display: inline-block;
+  padding: 10px 12px;
+  border-radius: 14px;
+  max-width: 80%;
+  line-height: 1.4;
+}
+.bubble-user {
+  background: #3b82f6;
+  color: white;
+  border-top-right-radius: 4px;
+}
+.bubble-assistant {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-top-left-radius: 4px;
+}
+
+
