@@ -64,7 +64,7 @@ export default function App() {
         onMessage: async (msg) => {
           try {
             if (msg?.type === 'session.created') {
-              // now update session
+              // switch to server-side VAD to avoid continuous replies
               wsRef.current?.sendJson({
                 type: 'session.update',
                 event_id: eid(),
@@ -73,23 +73,31 @@ export default function App() {
                   voice: sess.realtime?.voice || 'Cherry',
                   input_audio_format: 'pcm16',
                   output_audio_format: 'pcm24',
-                  turn_detection: { type: 'server_vad', threshold: 0.5, silence_duration_ms: 800 },
+                  instructions: '请始终用中文回答。',
+                  input_audio_transcription: { language: 'zh' },
+                  turn_detection: { type: 'server_vad', threshold: 0.3, silence_duration_ms: 500, create_response: true, interrupt_response: true },
                 },
               });
             } else if (msg?.type === 'session.updated') {
-              // start mic streaming only after session is updated
               if (!sessionReadyRef.current) {
                 sessionReadyRef.current = true;
-                const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const streamer = new AudioStreamer({ sendJson: (payload) => wsRef.current?.sendJson(payload), mode: 'vad' });
-                streamerRef.current = streamer;
-                await streamer.start(mic);
+                try {
+                  const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+                  const streamer = new AudioStreamer({ sendJson: (payload) => wsRef.current?.sendJson(payload), mode: 'vad', appendMs: 100 });
+                  streamerRef.current = streamer;
+                  await streamer.start(mic);
+                } catch (err: any) {
+                  message.error(`麦克风不可用：${err?.message || '权限被拒绝'}`);
+                  setStatus('idle');
+                }
               }
             } else if (msg?.type === 'response.audio_transcript.delta' && msg?.delta) {
               useCallStore.getState().addSubtitle({ role: 'assistant', text: msg.delta });
               setStatus('speaking');
             } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
-              (playerRef.current ??= new Pcm24Player()).playBase64Pcm24(msg.delta);
+              const p = (playerRef.current ??= new Pcm24Player());
+              if (msg?.sample_rate_hz) p.setSampleRateHz(msg.sample_rate_hz);
+              p.playBase64Pcm24(msg.delta);
             } else if (msg?.type === 'upstream.close') {
               message.warning(`上游关闭: code=${msg.code} reason=${msg.reason || ''}`);
               setStatus('idle');

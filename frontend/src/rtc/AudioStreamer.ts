@@ -35,7 +35,11 @@ export class AudioStreamer {
     this.source = this.ctx.createMediaStreamSource(stream);
     this.processor = this.ctx.createScriptProcessor(4096, 1, 1);
     this.source.connect(this.processor);
-    // do not connect to destination to avoid echo
+    // connect to a muted sink to ensure processor is pulled without echo
+    const sink = this.ctx.createGain();
+    sink.gain.value = 0;
+    this.processor.connect(sink);
+    sink.connect(this.ctx.destination);
     this.processor.onaudioprocess = (ev) => {
       const input = ev.inputBuffer.getChannelData(0);
       const pcm16 = this.downsampleToPCM16(input, this.ctx!.sampleRate, this.options.sampleRateOut);
