@@ -16,6 +16,10 @@ const { Title, Text } = Typography;
 
 function eid() { return 'event_' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
+// Debug助手 - 生产环境可通过设置为false来禁用
+const DEBUG = true; // 开发时设为true，生产时改为false
+const log = (...args: any[]) => DEBUG && console.log(...args);
+
 export default function App() {
   const { message } = AntdApp.useApp();
   const { status, setStatus } = useCallStore();
@@ -69,10 +73,10 @@ export default function App() {
           try {
             // Debug: 打印所有接收到的消息类型
             if (msg?.type) {
-              console.log('📨 收到消息:', msg.type);
-              if (msg.delta) console.log('  delta:', msg.delta);
-              if (msg.transcript) console.log('  transcript:', msg.transcript);
-              if (msg.text) console.log('  text:', msg.text);
+              log('📨 收到消息:', msg.type);
+              if (msg.delta) log('  delta:', msg.delta);
+              if (msg.transcript) log('  transcript:', msg.transcript);
+              if (msg.text) log('  text:', msg.text);
             }
             
             if (msg?.type === 'session.created') {
@@ -118,7 +122,7 @@ export default function App() {
                     onUserSpeaking: () => {
                       // 当用户开始说话时，如果AI正在说话，立即打断
                       if (isAiSpeakingRef.current) {
-                        console.log('⚠️ 用户打断AI，停止播放');
+                        log('⚠️ 用户打断AI，停止播放');
                         playerRef.current?.stopAll();
                         // 发送取消响应命令给服务器
                         wsRef.current?.sendJson({ 
@@ -128,7 +132,7 @@ export default function App() {
                         isAiSpeakingRef.current = false;
                         setStatus('listening');
                       } else {
-                        console.log('ℹ️ 检测到用户说话（AI未在说话）');
+                        log('ℹ️ 检测到用户说话（AI未在说话）');
                       }
                     }
                   });
@@ -141,7 +145,7 @@ export default function App() {
               }
             } else if (msg?.type === 'input_audio_buffer.speech_started') {
               // 用户开始说话 - 立即停止AI音频播放并忽略后续音频包
-              console.log('🎤 用户开始说话，停止AI音频播放');
+              log('🎤 用户开始说话，停止AI音频播放');
               // ⚠️ 无论AI是否在说话，都要停止播放（防止延迟）
               playerRef.current?.stopAll(); // 清空音频播放队列
               shouldIgnoreAudioRef.current = true; // 忽略后续音频包
@@ -149,18 +153,18 @@ export default function App() {
               setStatus('listening');
             } else if (msg?.type === 'input_audio_buffer.speech_stopped') {
               // 用户停止说话，等待转录完成
-              console.log('用户停止说话');
+              log('用户停止说话');
             } else if (msg?.type === 'input_audio_buffer.committed') {
               // 音频已提交到服务端
-              console.log('音频已提交');
+              log('音频已提交');
             } else if (msg?.type === 'conversation.item.input_audio_transcription.delta' && msg?.delta) {
               // 用户输入音频转录（流式）- Qwen会通过gummy-realtime-v1模型转录
-              console.log('用户输入（delta）:', msg.delta);
+              log('用户输入（delta）:', msg.delta);
               useCallStore.getState().appendToLastSubtitle(msg.delta, 'user');
             } else if (msg?.type === 'conversation.item.input_audio_transcription.completed') {
               // 用户输入音频转录完成 - Qwen返回完整的transcript
               const transcript = msg?.transcript || '';
-              console.log('用户转录完成:', transcript);
+              log('用户转录完成:', transcript);
               if (transcript) {
                 // 直接创建完整的用户消息
                 useCallStore.getState().addSubtitle({ 
@@ -171,43 +175,43 @@ export default function App() {
               }
             } else if (msg?.type === 'response.created') {
               // 新的响应创建 - 重置忽略标志，准备接收新音频
-              console.log('🎬 新响应创建');
+              log('🎬 新响应创建');
               shouldIgnoreAudioRef.current = false; // 允许播放新响应的音频
             } else if (msg?.type === 'response.output_item.added') {
               // 新的响应输出项添加
-              console.log('📝 响应输出项添加');
+              log('📝 响应输出项添加');
             } else if (msg?.type === 'response.content_part.added') {
               // 新的输出内容添加
-              console.log('新的输出内容添加');
+              log('新的输出内容添加');
             } else if (msg?.type === 'response.audio_transcript.delta' && msg?.delta) {
               // ⚠️ Qwen实际情况：audio_transcript 就是对话内容！
               // 虽然文档说这是TTS转录，但实际返回的是对话文本
-              console.log('AI回复（audio_transcript）:', msg.delta);
+              log('AI回复（audio_transcript）:', msg.delta);
               useCallStore.getState().appendToLastSubtitle(msg.delta, 'assistant');
               setStatus('speaking');
               isAiSpeakingRef.current = true;
             } else if (msg?.type === 'response.audio_transcript.done') {
               // AI语音转录完成
-              console.log('AI语音转录完成');
+              log('AI语音转录完成');
             } else if (msg?.type === 'response.text.delta' && msg?.delta) {
               // AI文本回复（流式）- 备用
-              console.log('AI回复（text.delta）:', msg.delta);
+              log('AI回复（text.delta）:', msg.delta);
               useCallStore.getState().appendToLastSubtitle(msg.delta, 'assistant');
               setStatus('speaking');
               isAiSpeakingRef.current = true;
             } else if (msg?.type === 'response.text.done') {
               // AI文本回复完成
-              console.log('AI文本回复完成');
+              log('AI文本回复完成');
             } else if (msg?.type === 'response.content_part.done') {
               // 内容部分完成
-              console.log('内容部分完成');
+              log('内容部分完成');
             } else if (msg?.type === 'response.output_item.done') {
               // 输出项完成
-              console.log('输出项完成');
+              log('输出项完成');
             } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
               // 如果标记为忽略音频，跳过播放（打断后可能还会收到旧的音频包）
               if (shouldIgnoreAudioRef.current) {
-                console.log('⏭️ 忽略打断后的音频包');
+                log('⏭️ 忽略打断后的音频包');
                 return;
               }
               const p = (playerRef.current ??= new Pcm24Player());
@@ -216,14 +220,14 @@ export default function App() {
               isAiSpeakingRef.current = true;
             } else if (msg?.type === 'response.done') {
               // AI完成响应
-              console.log('✅ AI响应完成');
+              log('✅ AI响应完成');
               useCallStore.getState().markLastSubtitleComplete();
               isAiSpeakingRef.current = false;
               shouldIgnoreAudioRef.current = false; // 重置忽略标志
               setStatus('listening');
             } else if (msg?.type === 'response.cancelled') {
               // AI响应被取消（打断）- 立即停止音频播放
-              console.log('❌ AI响应被取消（打断）');
+              log('❌ AI响应被取消（打断）');
               playerRef.current?.stopAll(); // 立即清空播放队列
               useCallStore.getState().markLastSubtitleComplete();
               isAiSpeakingRef.current = false;
@@ -255,30 +259,26 @@ export default function App() {
       wsRef.current?.close();
       await streamerRef.current?.stop();
       playerRef.current?.stopAll();
+      // 清理所有refs状态
       sessionReadyRef.current = false;
       isAiSpeakingRef.current = false;
+      shouldIgnoreAudioRef.current = false;
+      currentResponseIdRef.current = null;
     } finally {
       setStatus('ended');
     }
   }
 
-  // 临时测试函数 - 手动添加消息测试UI
-  function testAddMessage() {
-    useCallStore.getState().appendToLastSubtitle('测试用户消息', 'user');
-    useCallStore.getState().markLastSubtitleComplete();
-    setTimeout(() => {
-      useCallStore.getState().appendToLastSubtitle('测试AI回复', 'assistant');
-      useCallStore.getState().markLastSubtitleComplete();
-    }, 500);
-  }
-
   return (
     <div style={{ 
-      minHeight: '100vh', 
+      // 整个应用是一个标准的全屏单页：高度固定为一屏，由内部 flex 自行分配空间
+      minHeight: '100vh',
+      height: '100vh',
       display: 'flex', 
       flexDirection: 'column', 
       background: '#fafbfc',
       position: 'relative',
+      // 隐藏所有溢出，由 Avatar 区域和聊天区域的 flex + 内部滚动来保证内容不会被裁切
       overflow: 'hidden'
     }}>
       {/* 背景装饰 */}
@@ -289,7 +289,8 @@ export default function App() {
         width: 600,
         height: 600,
         background: 'radial-gradient(circle, rgba(102, 126, 234, 0.08) 0%, transparent 70%)',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        zIndex: 0
       }} />
       <div style={{
         position: 'absolute',
@@ -298,7 +299,8 @@ export default function App() {
         width: 600,
         height: 600,
         background: 'radial-gradient(circle, rgba(118, 75, 162, 0.08) 0%, transparent 70%)',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        zIndex: 0
       }} />
       {/* Header */}
       <header style={{ 
@@ -308,8 +310,7 @@ export default function App() {
         backdropFilter: 'blur(10px)',
         position: 'sticky',
         top: 0,
-        zIndex: 100,
-        position: 'relative'
+        zIndex: 20
       }}>
         <Flex align="center" justify="space-between" style={{ maxWidth: 1200, margin: '0 auto' }}>
           <Flex align="center" gap={10}>
@@ -339,8 +340,25 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 24px', position: 'relative', zIndex: 1 }}>
-        <div style={{ maxWidth: 900, width: '100%', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        padding: '0 24px', 
+        position: 'relative', 
+        zIndex: 2,
+        // 关键：允许子元素在flex容器中正确计算高度，避免产生额外滚动条
+        minHeight: 0
+      }}>
+        <div style={{ 
+          maxWidth: 900, 
+          width: '100%', 
+          margin: '0 auto', 
+          display: 'flex', 
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0
+        }}>
           {status === 'idle' || status === 'ended' ? (
             // Welcome Screen
             <motion.div 
@@ -500,30 +518,35 @@ export default function App() {
               </Space>
             </motion.div>
           ) : (
-            // Call Screen
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+            // Call Screen - 占满剩余空间，由内部flex控制布局
+            <div
               style={{ 
-                flex: 1, 
-                display: 'flex', 
+                width: '100%',
+                flex: 1,
+                minHeight: 0,
+                paddingTop: 32,
+                paddingBottom: 140, // 为底部控制条预留空间
+                display: 'flex',
                 flexDirection: 'column',
-                paddingTop: 40,
-                paddingBottom: 120
+                gap: 20
               }}
             >
-              <Space direction="vertical" size={24} style={{ width: '100%', height: '100%' }}>
-                {/* Avatar */}
+              {/* Avatar - 固定尺寸，不会被挤压 */}
+              <div style={{ flexShrink: 0, flexGrow: 0 }}>
                 <Flex justify="center">
                   <SpeakingAvatar status={status} />
                 </Flex>
-                
-                {/* Chat Panel */}
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <SubtitlePanel />
-                </div>
-              </Space>
-            </motion.div>
+              </div>
+              
+              {/* Chat Panel - 占满剩余高度，内部自己滚动 */}
+              <div style={{ 
+                width: '100%', 
+                flex: 1,
+                minHeight: 0
+              }}>
+                <SubtitlePanel />
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -535,7 +558,7 @@ export default function App() {
           borderTop: '1px solid rgba(0, 0, 0, 0.06)',
           background: 'rgba(255, 255, 255, 0.95)',
           position: 'relative',
-          zIndex: 1
+          zIndex: 2
         }}>
           <Flex justify="center" gap={24}>
             <Button type="link" style={{ color: '#64748b' }}>历史记录</Button>

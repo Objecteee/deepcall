@@ -8,17 +8,35 @@ export default function SubtitlePanel() {
   const { subtitles } = useCallStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<number | null>(null);
 
-  // Debug: 打印subtitles变化
+  // 自动滚动到底部（带防抖，只在消息完成时滚动）
   useEffect(() => {
-    console.log('🔄 SubtitlePanel subtitles更新:', subtitles.length, subtitles);
-  }, [subtitles]);
-
-  // 自动滚动到底部
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    // 清除之前的定时器
+    if (scrollTimeoutRef.current !== null) {
+      window.clearTimeout(scrollTimeoutRef.current);
     }
+
+    // 只有当最后一条消息完成时才滚动
+    const lastSubtitle = subtitles[subtitles.length - 1];
+    if (lastSubtitle?.isComplete) {
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        const container = scrollContainerRef.current;
+        if (container) {
+          // 只滚动聊天容器本身，避免影响外层页面的滚动位置
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+
+    return () => {
+      if (scrollTimeoutRef.current !== null) {
+        window.clearTimeout(scrollTimeoutRef.current);
+      }
+    };
   }, [subtitles]);
 
   return (
@@ -28,17 +46,14 @@ export default function SubtitlePanel() {
         border: '1px solid rgba(0, 0, 0, 0.06)',
         boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
         background: '#fff',
-        height: '100%'
+        height: '100%',
+        width: '100%'
       }}
       styles={{ 
         body: { 
           height: '100%',
-          minHeight: 500,
-          maxHeight: 600,
           padding: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column'
+          overflow: 'hidden'
         } 
       }}
     >
@@ -46,7 +61,7 @@ export default function SubtitlePanel() {
         ref={scrollContainerRef}
         className="chat-scroll"
         style={{ 
-          flex: 1,
+          height: '100%',
           overflowY: 'auto',
           overflowX: 'hidden',
           padding: 24,
@@ -73,7 +88,7 @@ export default function SubtitlePanel() {
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             {subtitles.map((s, i) => (
               <div
-                key={`${i}-${s.timestamp}`}
+                key={s.timestamp || `subtitle-${i}`}
                 style={{ 
                   display: 'flex', 
                   flexDirection: 'column',

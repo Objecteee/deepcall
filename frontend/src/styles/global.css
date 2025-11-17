@@ -19,7 +19,7 @@
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
-  z-index: 50;
+  z-index: 10;
 }
 
 /* Pulse ring around speaking avatar */
@@ -84,11 +84,6 @@
   transition: all 0.2s ease;
 }
 
-.bubble:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
 .bubble-user {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #ffffff;
@@ -130,4 +125,27 @@
   }
 }
 
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .bubble {
+    max-width: 85%;
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+}
+
+/* 只在支持hover的设备上启用hover效果 */
+@media (hover: hover) {
+  .bubble:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* 移除桌面端的默认hover（已在上面定义） */
+@media (hover: none) {
+  .bubble {
+    transition: none;
+  }
+}
 
