@@ -7,7 +7,7 @@ import http from 'http';
 import { setupWsProxy } from './ws/proxy';
 
 const app = express();
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 80;
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));

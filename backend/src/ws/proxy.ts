@@ -1,10 +1,11 @@
 import type { Server } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 
 export function setupWsProxy(server: Server) {
   const wss = new WebSocketServer({ server, path: '/realtime/ws' });
 
-  wss.on('connection', async (client, req) => {
+  // 显式标注参数类型为 any，避免 strict 模式下的隐式 any 报错
+  wss.on('connection', async (client: any, req: any) => {
     try {
       const apiKey = process.env.DASHSCOPE_API_KEY || process.env.OPENAI_API_KEY; // allow reuse if user sets OPENAI_API_KEY
       if (!apiKey) {
@@ -35,13 +36,13 @@ export function setupWsProxy(server: Server) {
         }
       });
 
-      upstream.on('message', (data, isBinary) => {
+      upstream.on('message', (data: any, isBinary: any) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(data, { binary: isBinary });
         }
       });
 
-      upstream.on('error', (err) => {
+      upstream.on('error', (err: any) => {
         try {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'upstream.error', message: (err as any)?.message || 'error' }));
@@ -50,7 +51,7 @@ export function setupWsProxy(server: Server) {
         } catch {}
       });
 
-      upstream.on('close', (code, reason) => {
+      upstream.on('close', (code: any, reason: any) => {
         try {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'upstream.close', code, reason: reason.toString() }));
@@ -60,7 +61,7 @@ export function setupWsProxy(server: Server) {
         if (pingTimer) clearInterval(pingTimer);
       });
 
-      client.on('message', (data, isBinary) => {
+      client.on('message', (data: any, isBinary: any) => {
         if (upstream.readyState === WebSocket.OPEN) {
           upstream.send(data, { binary: isBinary });
         }
