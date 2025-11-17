@@ -25,6 +25,8 @@ export default function App() {
   const playerRef = useRef<Pcm24Player | null>(null);
   const sessionReadyRef = useRef(false);
   const isAiSpeakingRef = useRef(false); // 跟踪AI是否正在说话
+  const currentResponseIdRef = useRef<string | null>(null); // 当前响应ID
+  const shouldIgnoreAudioRef = useRef(false); // 是否应该忽略音频（打断后）
 
   const statusInfo = useMemo(() => {
     switch (status) {
@@ -138,8 +140,13 @@ export default function App() {
                 }
               }
             } else if (msg?.type === 'input_audio_buffer.speech_started') {
-              // 用户开始说话
-              console.log('用户开始说话');
+              // 用户开始说话 - 立即停止AI音频播放并忽略后续音频包
+              console.log('🎤 用户开始说话，停止AI音频播放');
+              // ⚠️ 无论AI是否在说话，都要停止播放（防止延迟）
+              playerRef.current?.stopAll(); // 清空音频播放队列
+              shouldIgnoreAudioRef.current = true; // 忽略后续音频包
+              isAiSpeakingRef.current = false;
+              setStatus('listening');
             } else if (msg?.type === 'input_audio_buffer.speech_stopped') {
               // 用户停止说话，等待转录完成
               console.log('用户停止说话');
@@ -162,9 +169,13 @@ export default function App() {
                   isComplete: true 
                 });
               }
+            } else if (msg?.type === 'response.created') {
+              // 新的响应创建 - 重置忽略标志，准备接收新音频
+              console.log('🎬 新响应创建');
+              shouldIgnoreAudioRef.current = false; // 允许播放新响应的音频
             } else if (msg?.type === 'response.output_item.added') {
-              // 响应输出项添加
-              console.log('响应输出项添加');
+              // 新的响应输出项添加
+              console.log('📝 响应输出项添加');
             } else if (msg?.type === 'response.content_part.added') {
               // 新的输出内容添加
               console.log('新的输出内容添加');
@@ -194,14 +205,29 @@ export default function App() {
               // 输出项完成
               console.log('输出项完成');
             } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
+              // 如果标记为忽略音频，跳过播放（打断后可能还会收到旧的音频包）
+              if (shouldIgnoreAudioRef.current) {
+                console.log('⏭️ 忽略打断后的音频包');
+                return;
+              }
               const p = (playerRef.current ??= new Pcm24Player());
               if (msg?.sample_rate_hz) p.setSampleRateHz(msg.sample_rate_hz);
               p.playBase64Pcm24(msg.delta);
               isAiSpeakingRef.current = true;
-            } else if (msg?.type === 'response.done' || msg?.type === 'response.cancelled') {
-              // AI完成响应或被取消
+            } else if (msg?.type === 'response.done') {
+              // AI完成响应
+              console.log('✅ AI响应完成');
               useCallStore.getState().markLastSubtitleComplete();
               isAiSpeakingRef.current = false;
+              shouldIgnoreAudioRef.current = false; // 重置忽略标志
+              setStatus('listening');
+            } else if (msg?.type === 'response.cancelled') {
+              // AI响应被取消（打断）- 立即停止音频播放
+              console.log('❌ AI响应被取消（打断）');
+              playerRef.current?.stopAll(); // 立即清空播放队列
+              useCallStore.getState().markLastSubtitleComplete();
+              isAiSpeakingRef.current = false;
+              shouldIgnoreAudioRef.current = true; // 继续忽略后续可能到达的音频包
               setStatus('listening');
             } else if (msg?.type === 'upstream.close') {
               message.warning(`上游关闭: code=${msg.code} reason=${msg.reason || ''}`);
@@ -247,46 +273,207 @@ export default function App() {
   }
 
   return (
-    <Flex vertical align="center" justify="center" style={{ minHeight: '100vh', padding: 24 }}>
-      <Space direction="vertical" align="center" size={16} style={{ width: '100%', maxWidth: 960 }}>
-        {/* Top Bar */}
-        <Flex align="center" justify="space-between" style={{ width: '100%' }}>
-          <Title level={4} style={{ margin: 0 }}>DeepCall</Title>
-          <Space>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg, #f7f9fc 0%, #ffffff 100%)' }}>
+      {/* Header */}
+      <header style={{ 
+        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+        padding: '16px 32px',
+        background: 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(10px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <Flex align="center" justify="space-between" style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <Flex align="center" gap={12}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: 18
+            }}>
+              D
+            </div>
+            <Title level={4} style={{ margin: 0, fontWeight: 600 }}>DeepCall</Title>
+          </Flex>
+          <Space size={16}>
             <Badge status={statusInfo.color} text={statusInfo.text} />
-            <Text type="secondary">{latencyMs ? `${latencyMs} ms` : ''}</Text>
+            {latencyMs && <Text type="secondary" style={{ fontSize: 13 }}>{latencyMs} ms</Text>}
             <DeviceSelector />
           </Space>
         </Flex>
+      </header>
 
-        {/* Main Panel */}
-        <Card className="glass-card" style={{ width: '100%' }} styles={{ body: { padding: 24 } }}>
-          <Flex align="center" justify="center" vertical gap={16}>
-            {status === 'idle' || status === 'ended' ? (
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-                <CallButton onStart={startCall} />
-              </motion.div>
-            ) : (
-              <>
-                <SpeakingAvatar status={status} />
-                <SubtitlePanel />
-              </>
-            )}
+      {/* Main Content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 24px' }}>
+        <div style={{ maxWidth: 900, width: '100%', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {status === 'idle' || status === 'ended' ? (
+            // Welcome Screen
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              style={{ 
+                flex: 1, 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '80px 24px'
+              }}
+            >
+              <Space direction="vertical" align="center" size={32} style={{ width: '100%' }}>
+                {/* Hero Section */}
+                <Space direction="vertical" align="center" size={16}>
+                  <Title level={1} style={{ 
+                    margin: 0, 
+                    fontSize: 48, 
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>
+                    AI语音助手
+                  </Title>
+                  <Text style={{ 
+                    fontSize: 18, 
+                    color: '#64748b',
+                    textAlign: 'center',
+                    maxWidth: 500
+                  }}>
+                    实时语音对话，智能交互体验<br/>支持打断、多轮对话、实时文字显示
+                  </Text>
+                </Space>
+
+                {/* Call Button */}
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }} 
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.2, duration: 0.4 }}
+                  style={{ marginTop: 24 }}
+                >
+                  <CallButton onStart={startCall} />
+                </motion.div>
+
+                {/* Feature Cards */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                  style={{ marginTop: 48, width: '100%', maxWidth: 800 }}
+                >
+                  <Flex gap={16} wrap="wrap" justify="center">
+                    <Card 
+                      style={{ 
+                        flex: '1 1 200px',
+                        minWidth: 200,
+                        borderRadius: 12,
+                        border: '1px solid rgba(0, 0, 0, 0.06)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                      }}
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Space direction="vertical" size={8}>
+                        <div style={{ fontSize: 24 }}>🎙️</div>
+                        <Text strong>实时对话</Text>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                          自然流畅的语音交互
+                        </Text>
+                      </Space>
+                    </Card>
+                    <Card 
+                      style={{ 
+                        flex: '1 1 200px',
+                        minWidth: 200,
+                        borderRadius: 12,
+                        border: '1px solid rgba(0, 0, 0, 0.06)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                      }}
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Space direction="vertical" size={8}>
+                        <div style={{ fontSize: 24 }}>⚡</div>
+                        <Text strong>智能打断</Text>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                          随时打断AI回应
+                        </Text>
+                      </Space>
+                    </Card>
+                    <Card 
+                      style={{ 
+                        flex: '1 1 200px',
+                        minWidth: 200,
+                        borderRadius: 12,
+                        border: '1px solid rgba(0, 0, 0, 0.06)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                      }}
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Space direction="vertical" size={8}>
+                        <div style={{ fontSize: 24 }}>💬</div>
+                        <Text strong>实时字幕</Text>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                          对话内容实时显示
+                        </Text>
+                      </Space>
+                    </Card>
+                  </Flex>
+                </motion.div>
+              </Space>
+            </motion.div>
+          ) : (
+            // Call Screen
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{ 
+                flex: 1, 
+                display: 'flex', 
+                flexDirection: 'column',
+                paddingTop: 40,
+                paddingBottom: 120
+              }}
+            >
+              <Space direction="vertical" size={24} style={{ width: '100%', height: '100%' }}>
+                {/* Avatar */}
+                <Flex justify="center">
+                  <SpeakingAvatar status={status} />
+                </Flex>
+                
+                {/* Chat Panel */}
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <SubtitlePanel />
+                </div>
+              </Space>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer Links - Only show when idle */}
+      {(status === 'idle' || status === 'ended') && (
+        <footer style={{ 
+          padding: '24px 32px',
+          borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+          background: 'rgba(255, 255, 255, 0.9)'
+        }}>
+          <Flex justify="center" gap={24}>
+            <Button type="link" style={{ color: '#64748b' }}>历史记录</Button>
+            <Button type="link" style={{ color: '#64748b' }}>设置</Button>
           </Flex>
-        </Card>
+        </footer>
+      )}
 
-        <Space>
-          <Button type="link">历史记录</Button>
-          <Button type="link">设置</Button>
-          {/* 临时测试按钮 */}
-          <Button type="link" onClick={testAddMessage} style={{ color: '#ff4d4f' }}>
-            测试添加消息
-          </Button>
-        </Space>
-      </Space>
       {/* Floating bottom controls (during call) */}
-      {status !== 'idle' && status !== 'ended' ? <ControlBar onHangup={hangup} /> : null}
-    </Flex>
+      {status !== 'idle' && status !== 'ended' && <ControlBar onHangup={hangup} />}
+    </div>
   );
 }
 

@@ -23,13 +23,22 @@ export default function SubtitlePanel() {
 
   return (
     <Card 
-      size="small" 
-      className="glass-card" 
+      style={{ 
+        borderRadius: 16,
+        border: '1px solid rgba(0, 0, 0, 0.06)',
+        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+        background: '#fff',
+        height: '100%'
+      }}
       styles={{ 
         body: { 
-          height: 400,
+          height: '100%',
+          minHeight: 500,
+          maxHeight: 600,
           padding: 0,
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
         } 
       }}
     >
@@ -37,26 +46,31 @@ export default function SubtitlePanel() {
         ref={scrollContainerRef}
         className="chat-scroll"
         style={{ 
-          height: '100%',
+          flex: 1,
           overflowY: 'auto',
           overflowX: 'hidden',
-          padding: 16,
+          padding: 24,
         }}
       >
         {subtitles.length === 0 ? (
           <Empty 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="开始对话，实时记录将显示在这里..."
+            description={
+              <span style={{ color: '#94a3b8', fontSize: 14 }}>
+                开始对话，实时记录将显示在这里...
+              </span>
+            }
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               height: '100%',
+              paddingTop: 60
             }}
           />
         ) : (
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
             {subtitles.map((s, i) => (
               <div
                 key={`${i}-${s.timestamp}`}
@@ -64,16 +78,17 @@ export default function SubtitlePanel() {
                   display: 'flex', 
                   flexDirection: 'column',
                   alignItems: s.role === 'user' ? 'flex-end' : 'flex-start',
-                  gap: 4,
+                  gap: 6,
                   animation: 'fadeIn 0.3s ease-in',
                 }}
               >
                 <Text 
                   type="secondary" 
                   style={{ 
-                    fontSize: 11, 
-                    paddingLeft: s.role === 'user' ? 0 : 8,
-                    paddingRight: s.role === 'user' ? 8 : 0,
+                    fontSize: 12, 
+                    paddingLeft: s.role === 'user' ? 0 : 12,
+                    paddingRight: s.role === 'user' ? 12 : 0,
+                    fontWeight: 500
                   }}
                 >
                   {s.role === 'user' ? '我' : 'AI助手'}
