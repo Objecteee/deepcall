@@ -6,6 +6,7 @@ export type AudioStreamerOptions = {
   onError?: (e: any) => void;
   onStart?: () => void;
   onStop?: () => void;
+  onUserSpeaking?: () => void; // 当检测到用户开始说话时触发
 };
 
 export class AudioStreamer {
@@ -16,6 +17,10 @@ export class AudioStreamer {
   private queue: Int16Array[] = [];
   private lastCommit = 0;
   private options: Required<AudioStreamerOptions>;
+  private isSpeaking = false; // 是否正在说话
+  private silenceFrames = 0; // 连续静音帧数
+  private readonly SILENCE_THRESHOLD = 0.01; // 静音阈值（RMS）
+  private readonly SPEECH_FRAMES_THRESHOLD = 3; // 需要连续3帧有声音才算开始说话
 
   constructor(options: AudioStreamerOptions) {
     this.options = {
@@ -26,6 +31,7 @@ export class AudioStreamer {
       onError: options.onError ?? (() => {}),
       onStart: options.onStart ?? (() => {}),
       onStop: options.onStop ?? (() => {}),
+      onUserSpeaking: options.onUserSpeaking ?? (() => {}),
     } as Required<AudioStreamerOptions>;
   }
 
@@ -42,6 +48,10 @@ export class AudioStreamer {
     sink.connect(this.ctx.destination);
     this.processor.onaudioprocess = (ev) => {
       const input = ev.inputBuffer.getChannelData(0);
+      
+      // 检测用户是否开始说话
+      this.detectSpeech(input);
+      
       const pcm16 = this.downsampleToPCM16(input, this.ctx!.sampleRate, this.options.sampleRateOut);
       if (pcm16.length) this.queue.push(pcm16);
       this.flushIfNeeded();
@@ -56,7 +66,38 @@ export class AudioStreamer {
     try { if (this.source) this.source.disconnect(); } catch {}
     try { if (this.ctx) await this.ctx.close(); } catch {}
     this.ctx = null; this.source = null; this.processor = null; this.queue = []; this.lastCommit = 0;
+    this.isSpeaking = false;
+    this.silenceFrames = 0;
     this.options.onStop();
+  }
+
+  /**
+   * 检测用户是否开始说话（简单的基于RMS的VAD）
+   */
+  private detectSpeech(audioData: Float32Array) {
+    // 计算RMS（均方根）
+    let sum = 0;
+    for (let i = 0; i < audioData.length; i++) {
+      sum += audioData[i] * audioData[i];
+    }
+    const rms = Math.sqrt(sum / audioData.length);
+    
+    // 如果音量超过阈值，说明有声音
+    if (rms > this.SILENCE_THRESHOLD) {
+      this.silenceFrames = 0;
+      if (!this.isSpeaking) {
+        // 从静音状态转为说话状态，触发打断回调
+        this.isSpeaking = true;
+        this.options.onUserSpeaking();
+      }
+    } else {
+      // 静音帧
+      this.silenceFrames++;
+      // 如果连续静音超过一定帧数（约0.5秒），认为停止说话
+      if (this.silenceFrames > 10 && this.isSpeaking) {
+        this.isSpeaking = false;
+      }
+    }
   }
 
   private flushIfNeeded() {

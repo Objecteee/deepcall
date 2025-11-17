@@ -24,6 +24,7 @@ export default function App() {
   const streamerRef = useRef<AudioStreamer | null>(null);
   const playerRef = useRef<Pcm24Player | null>(null);
   const sessionReadyRef = useRef(false);
+  const isAiSpeakingRef = useRef(false); // 跟踪AI是否正在说话
 
   const statusInfo = useMemo(() => {
     switch (status) {
@@ -45,6 +46,7 @@ export default function App() {
   async function startCall() {
     try {
       setStatus('connecting');
+      useCallStore.getState().clearSubtitles();
 
       const sess = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'qwen3-omni-flash-realtime', voice: 'Cherry' }) }).then(r => r.json());
 
@@ -63,23 +65,39 @@ export default function App() {
         },
         onMessage: async (msg) => {
           try {
+            // Debug: 打印所有接收到的消息类型
+            if (msg?.type) {
+              console.log('📨 收到消息:', msg.type);
+              if (msg.delta) console.log('  delta:', msg.delta);
+              if (msg.transcript) console.log('  transcript:', msg.transcript);
+              if (msg.text) console.log('  text:', msg.text);
+            }
+            
             if (msg?.type === 'session.created') {
               // switch to server-side VAD to avoid continuous replies
               wsRef.current?.sendJson({
                 type: 'session.update',
                 event_id: eid(),
                 session: {
+                  // 输出模态：文本和音频
                   output_modalities: ['TEXT', 'AUDIO'],
+                  // 音色
                   voice: sess.realtime?.voice || 'Cherry',
+                  // 输入音频格式（固定）
                   input_audio_format: 'PCM_16000HZ_MONO_16BIT',
+                  // 输出音频格式（固定）
                   output_audio_format: 'PCM_24000HZ_MONO_16BIT',
+                  // 系统指令
                   instructions: '请始终用中文回答。',
+                  // 启用输入音频转录（使用gummy模型）
                   enable_input_audio_transcription: true,
                   input_audio_transcription_model: 'gummy-realtime-v1',
+                  // 启用服务端VAD（自动检测语音起止）
                   enable_turn_detection: true,
                   turn_detection_type: 'server_vad',
                   turn_detection_threshold: 0.2,
                   turn_detection_silence_duration_ms: 800,
+                  // 口语化输出（true=口语化，false=书面化，null=自动）
                   smooth_output: true,
                 },
               });
@@ -88,7 +106,25 @@ export default function App() {
                 sessionReadyRef.current = true;
                 try {
                   const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-                  const streamer = new AudioStreamer({ sendJson: (payload) => wsRef.current?.sendJson(payload), mode: 'vad', appendMs: 100 });
+                  const streamer = new AudioStreamer({ 
+                    sendJson: (payload) => wsRef.current?.sendJson(payload), 
+                    mode: 'vad', 
+                    appendMs: 100,
+                    onUserSpeaking: () => {
+                      // 当用户开始说话时，如果AI正在说话，立即打断
+                      if (isAiSpeakingRef.current) {
+                        console.log('用户打断，停止AI播放');
+                        playerRef.current?.stopAll();
+                        // 发送取消响应命令给服务器
+                        wsRef.current?.sendJson({ 
+                          type: 'response.cancel',
+                          event_id: eid()
+                        });
+                        isAiSpeakingRef.current = false;
+                        setStatus('listening');
+                      }
+                    }
+                  });
                   streamerRef.current = streamer;
                   await streamer.start(mic);
                 } catch (err: any) {
@@ -96,19 +132,80 @@ export default function App() {
                   setStatus('idle');
                 }
               }
+            } else if (msg?.type === 'input_audio_buffer.speech_started') {
+              // 用户开始说话
+              console.log('用户开始说话');
+            } else if (msg?.type === 'input_audio_buffer.speech_stopped') {
+              // 用户停止说话，等待转录完成
+              console.log('用户停止说话');
+            } else if (msg?.type === 'input_audio_buffer.committed') {
+              // 音频已提交到服务端
+              console.log('音频已提交');
+            } else if (msg?.type === 'conversation.item.input_audio_transcription.delta' && msg?.delta) {
+              // 用户输入音频转录（流式）- Qwen会通过gummy-realtime-v1模型转录
+              console.log('用户输入（delta）:', msg.delta);
+              useCallStore.getState().appendToLastSubtitle(msg.delta, 'user');
+            } else if (msg?.type === 'conversation.item.input_audio_transcription.completed') {
+              // 用户输入音频转录完成 - Qwen返回完整的transcript
+              const transcript = msg?.transcript || '';
+              console.log('用户转录完成:', transcript);
+              if (transcript) {
+                // 直接创建完整的用户消息
+                useCallStore.getState().addSubtitle({ 
+                  role: 'user', 
+                  text: transcript,
+                  isComplete: true 
+                });
+              }
+            } else if (msg?.type === 'response.output_item.added') {
+              // 响应输出项添加
+              console.log('响应输出项添加');
+            } else if (msg?.type === 'response.content_part.added') {
+              // 新的输出内容添加
+              console.log('新的输出内容添加');
             } else if (msg?.type === 'response.audio_transcript.delta' && msg?.delta) {
-              useCallStore.getState().addSubtitle({ role: 'assistant', text: msg.delta });
+              // ⚠️ Qwen实际情况：audio_transcript 就是对话内容！
+              // 虽然文档说这是TTS转录，但实际返回的是对话文本
+              console.log('AI回复（audio_transcript）:', msg.delta);
+              useCallStore.getState().appendToLastSubtitle(msg.delta, 'assistant');
               setStatus('speaking');
+              isAiSpeakingRef.current = true;
+            } else if (msg?.type === 'response.audio_transcript.done') {
+              // AI语音转录完成
+              console.log('AI语音转录完成');
+            } else if (msg?.type === 'response.text.delta' && msg?.delta) {
+              // AI文本回复（流式）- 备用
+              console.log('AI回复（text.delta）:', msg.delta);
+              useCallStore.getState().appendToLastSubtitle(msg.delta, 'assistant');
+              setStatus('speaking');
+              isAiSpeakingRef.current = true;
+            } else if (msg?.type === 'response.text.done') {
+              // AI文本回复完成
+              console.log('AI文本回复完成');
+            } else if (msg?.type === 'response.content_part.done') {
+              // 内容部分完成
+              console.log('内容部分完成');
+            } else if (msg?.type === 'response.output_item.done') {
+              // 输出项完成
+              console.log('输出项完成');
             } else if (msg?.type === 'response.audio.delta' && msg?.delta) {
               const p = (playerRef.current ??= new Pcm24Player());
               if (msg?.sample_rate_hz) p.setSampleRateHz(msg.sample_rate_hz);
               p.playBase64Pcm24(msg.delta);
+              isAiSpeakingRef.current = true;
+            } else if (msg?.type === 'response.done' || msg?.type === 'response.cancelled') {
+              // AI完成响应或被取消
+              useCallStore.getState().markLastSubtitleComplete();
+              isAiSpeakingRef.current = false;
+              setStatus('listening');
             } else if (msg?.type === 'upstream.close') {
               message.warning(`上游关闭: code=${msg.code} reason=${msg.reason || ''}`);
               setStatus('idle');
+              isAiSpeakingRef.current = false;
             } else if (msg?.type === 'error') {
               message.error(msg?.error?.message || '模型错误');
               setStatus('idle');
+              isAiSpeakingRef.current = false;
             }
           } catch {}
         },
@@ -126,10 +223,22 @@ export default function App() {
     try {
       wsRef.current?.close();
       await streamerRef.current?.stop();
+      playerRef.current?.stopAll();
       sessionReadyRef.current = false;
+      isAiSpeakingRef.current = false;
     } finally {
       setStatus('ended');
     }
+  }
+
+  // 临时测试函数 - 手动添加消息测试UI
+  function testAddMessage() {
+    useCallStore.getState().appendToLastSubtitle('测试用户消息', 'user');
+    useCallStore.getState().markLastSubtitleComplete();
+    setTimeout(() => {
+      useCallStore.getState().appendToLastSubtitle('测试AI回复', 'assistant');
+      useCallStore.getState().markLastSubtitleComplete();
+    }, 500);
   }
 
   return (
@@ -164,6 +273,10 @@ export default function App() {
         <Space>
           <Button type="link">历史记录</Button>
           <Button type="link">设置</Button>
+          {/* 临时测试按钮 */}
+          <Button type="link" onClick={testAddMessage} style={{ color: '#ff4d4f' }}>
+            测试添加消息
+          </Button>
         </Space>
       </Space>
       {/* Floating bottom controls (during call) */}

@@ -49,23 +49,78 @@
   }
 }
 
-/* Chat bubbles */
+/* Chat panel */
+.chat-panel {
+  width: 100%;
+}
+
+/* Custom scrollbar for chat */
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Chat bubbles - WeChat style */
 .bubble {
   display: inline-block;
-  padding: 10px 12px;
-  border-radius: 14px;
-  max-width: 80%;
-  line-height: 1.4;
+  padding: 10px 14px;
+  border-radius: 8px;
+  max-width: 70%;
+  line-height: 1.5;
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  font-size: 14px;
+  position: relative;
 }
+
 .bubble-user {
-  background: #3b82f6;
-  color: white;
-  border-top-right-radius: 4px;
+  background: #95ec69;
+  color: #000000;
+  border-top-right-radius: 2px;
 }
+
 .bubble-assistant {
-  background: #f1f5f9;
-  color: #0f172a;
-  border-top-left-radius: 4px;
+  background: #ffffff;
+  color: #000000;
+  border-top-left-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Typing indicator animation */
+.typing-indicator {
+  display: inline-block;
+  margin-left: 4px;
+  animation: blink 1s infinite;
+  color: inherit;
+  opacity: 0.6;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.1; }
+}
+
+/* Fade in animation for new messages */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 

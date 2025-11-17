@@ -2,6 +2,7 @@ export class Pcm24Player {
   private ctx: AudioContext | null = null;
   private queueTime = 0;
   private sampleRate = 24000; // default to 24 kHz per Qwen Omni docs
+  private activeSources: AudioBufferSourceNode[] = []; // Track all playing sources
 
   private async ensure() {
     if (!this.ctx) {
@@ -13,6 +14,24 @@ export class Pcm24Player {
 
   setSampleRateHz(sr: number) {
     if (sr && sr > 0) this.sampleRate = sr;
+  }
+
+  /**
+   * 立即停止所有正在播放的音频，清空队列
+   */
+  stopAll() {
+    // Stop all active sources
+    for (const source of this.activeSources) {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch {}
+    }
+    this.activeSources = [];
+    // Reset queue time to current time
+    if (this.ctx) {
+      this.queueTime = this.ctx.currentTime;
+    }
   }
 
   async playBase64Pcm24(b64: string) {
@@ -44,6 +63,13 @@ export class Pcm24Player {
     const startAt = Math.max(this.ctx!.currentTime, this.queueTime);
     src.start(startAt);
     this.queueTime = startAt + buffer.duration;
+    
+    // Track this source and remove it when it ends
+    this.activeSources.push(src);
+    src.onended = () => {
+      const idx = this.activeSources.indexOf(src);
+      if (idx !== -1) this.activeSources.splice(idx, 1);
+    };
   }
 
   private pickBest(candidates: Float32Array[]): Float32Array {
