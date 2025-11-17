@@ -12,6 +12,7 @@ dist/
 build/
 frontend/dist/
 backend/dist/
+backend/public/
 .tmp/
 .temp/
 .cache/

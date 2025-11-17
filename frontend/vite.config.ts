@@ -2,6 +2,10 @@ import { defineConfig } from 'vite';
 import path from 'node:path';
 
 export default defineConfig({
+  build: {
+    outDir: '../backend/public',
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
       '/session': 'http://localhost:3000',
