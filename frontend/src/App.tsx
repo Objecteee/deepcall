@@ -110,10 +110,13 @@ export default function App() {
                     sendJson: (payload) => wsRef.current?.sendJson(payload), 
                     mode: 'vad', 
                     appendMs: 100,
+                    // ⚠️ 禁用客户端VAD打断功能，避免误触发
+                    // 改用服务端VAD（turn_detection），更准确且不会被AI音频干扰
+                    enableClientVAD: false,
                     onUserSpeaking: () => {
                       // 当用户开始说话时，如果AI正在说话，立即打断
                       if (isAiSpeakingRef.current) {
-                        console.log('用户打断，停止AI播放');
+                        console.log('⚠️ 用户打断AI，停止播放');
                         playerRef.current?.stopAll();
                         // 发送取消响应命令给服务器
                         wsRef.current?.sendJson({ 
@@ -122,6 +125,8 @@ export default function App() {
                         });
                         isAiSpeakingRef.current = false;
                         setStatus('listening');
+                      } else {
+                        console.log('ℹ️ 检测到用户说话（AI未在说话）');
                       }
                     }
                   });

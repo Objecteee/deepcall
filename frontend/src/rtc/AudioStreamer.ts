@@ -7,6 +7,7 @@ export type AudioStreamerOptions = {
   onStart?: () => void;
   onStop?: () => void;
   onUserSpeaking?: () => void; // 当检测到用户开始说话时触发
+  enableClientVAD?: boolean; // 是否启用客户端VAD检测（用于打断），默认false
 };
 
 export class AudioStreamer {
@@ -19,8 +20,9 @@ export class AudioStreamer {
   private options: Required<AudioStreamerOptions>;
   private isSpeaking = false; // 是否正在说话
   private silenceFrames = 0; // 连续静音帧数
-  private readonly SILENCE_THRESHOLD = 0.01; // 静音阈值（RMS）
-  private readonly SPEECH_FRAMES_THRESHOLD = 3; // 需要连续3帧有声音才算开始说话
+  private speechFrames = 0; // 连续有声音的帧数
+  private readonly SILENCE_THRESHOLD = 0.02; // 静音阈值（RMS）- 提高以避免误触发
+  private readonly SPEECH_FRAMES_THRESHOLD = 5; // 需要连续5帧有声音才算开始说话 - 增加以避免误判
 
   constructor(options: AudioStreamerOptions) {
     this.options = {
@@ -32,6 +34,7 @@ export class AudioStreamer {
       onStart: options.onStart ?? (() => {}),
       onStop: options.onStop ?? (() => {}),
       onUserSpeaking: options.onUserSpeaking ?? (() => {}),
+      enableClientVAD: options.enableClientVAD ?? false, // 默认禁用客户端VAD
     } as Required<AudioStreamerOptions>;
   }
 
@@ -49,8 +52,10 @@ export class AudioStreamer {
     this.processor.onaudioprocess = (ev) => {
       const input = ev.inputBuffer.getChannelData(0);
       
-      // 检测用户是否开始说话
-      this.detectSpeech(input);
+      // 只有在启用客户端VAD时才检测用户说话（用于打断）
+      if (this.options.enableClientVAD) {
+        this.detectSpeech(input);
+      }
       
       const pcm16 = this.downsampleToPCM16(input, this.ctx!.sampleRate, this.options.sampleRateOut);
       if (pcm16.length) this.queue.push(pcm16);
@@ -68,11 +73,12 @@ export class AudioStreamer {
     this.ctx = null; this.source = null; this.processor = null; this.queue = []; this.lastCommit = 0;
     this.isSpeaking = false;
     this.silenceFrames = 0;
+    this.speechFrames = 0;
     this.options.onStop();
   }
 
   /**
-   * 检测用户是否开始说话（简单的基于RMS的VAD）
+   * 检测用户是否开始说话（改进的VAD，避免误触发）
    */
   private detectSpeech(audioData: Float32Array) {
     // 计算RMS（均方根）
@@ -85,17 +91,23 @@ export class AudioStreamer {
     // 如果音量超过阈值，说明有声音
     if (rms > this.SILENCE_THRESHOLD) {
       this.silenceFrames = 0;
-      if (!this.isSpeaking) {
+      this.speechFrames++;
+      
+      // 需要连续多帧超过阈值才触发（避免误判）
+      if (this.speechFrames >= this.SPEECH_FRAMES_THRESHOLD && !this.isSpeaking) {
         // 从静音状态转为说话状态，触发打断回调
         this.isSpeaking = true;
+        console.log('🎤 检测到用户说话（连续', this.speechFrames, '帧超过阈值）');
         this.options.onUserSpeaking();
       }
     } else {
       // 静音帧
+      this.speechFrames = 0; // 重置语音帧计数
       this.silenceFrames++;
       // 如果连续静音超过一定帧数（约0.5秒），认为停止说话
       if (this.silenceFrames > 10 && this.isSpeaking) {
         this.isSpeaking = false;
+        console.log('🔇 用户停止说话');
       }
     }
   }
