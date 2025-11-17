@@ -273,34 +273,62 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg, #f7f9fc 0%, #ffffff 100%)' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      background: '#fafbfc',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      {/* 背景装饰 */}
+      <div style={{
+        position: 'absolute',
+        top: -200,
+        left: -200,
+        width: 600,
+        height: 600,
+        background: 'radial-gradient(circle, rgba(102, 126, 234, 0.08) 0%, transparent 70%)',
+        pointerEvents: 'none'
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: -200,
+        right: -200,
+        width: 600,
+        height: 600,
+        background: 'radial-gradient(circle, rgba(118, 75, 162, 0.08) 0%, transparent 70%)',
+        pointerEvents: 'none'
+      }} />
       {/* Header */}
       <header style={{ 
         borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
         padding: '16px 32px',
-        background: 'rgba(255, 255, 255, 0.9)',
+        background: 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(10px)',
         position: 'sticky',
         top: 0,
-        zIndex: 100
+        zIndex: 100,
+        position: 'relative'
       }}>
         <Flex align="center" justify="space-between" style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <Flex align="center" gap={12}>
+          <Flex align="center" gap={10}>
             <div style={{
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               borderRadius: 8,
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
-              fontWeight: 600,
-              fontSize: 18
+              fontWeight: 700,
+              fontSize: 16,
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
             }}>
               D
             </div>
-            <Title level={4} style={{ margin: 0, fontWeight: 600 }}>DeepCall</Title>
+            <Title level={4} style={{ margin: 0, fontWeight: 600, fontSize: 18 }}>DeepCall</Title>
           </Flex>
           <Space size={16}>
             <Badge status={statusInfo.color} text={statusInfo.text} />
@@ -311,7 +339,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 24px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 24px', position: 'relative', zIndex: 1 }}>
         <div style={{ maxWidth: 900, width: '100%', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column' }}>
           {status === 'idle' || status === 'ended' ? (
             // Welcome Screen
@@ -330,25 +358,35 @@ export default function App() {
             >
               <Space direction="vertical" align="center" size={32} style={{ width: '100%' }}>
                 {/* Hero Section */}
-                <Space direction="vertical" align="center" size={16}>
+                <Space direction="vertical" align="center" size={20}>
                   <Title level={1} style={{ 
                     margin: 0, 
-                    fontSize: 48, 
+                    fontSize: 56, 
                     fontWeight: 700,
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
+                    backgroundClip: 'text',
+                    letterSpacing: '-0.02em'
                   }}>
-                    AI语音助手
+                    DeepCall AI
                   </Title>
                   <Text style={{ 
-                    fontSize: 18, 
+                    fontSize: 20, 
                     color: '#64748b',
                     textAlign: 'center',
-                    maxWidth: 500
+                    maxWidth: 560,
+                    lineHeight: 1.6
                   }}>
-                    实时语音对话，智能交互体验<br/>支持打断、多轮对话、实时文字显示
+                    实时语音对话，自然流畅交互
+                  </Text>
+                  <Text style={{ 
+                    fontSize: 15, 
+                    color: '#94a3b8',
+                    textAlign: 'center',
+                    maxWidth: 480
+                  }}>
+                    支持智能打断 · 多轮对话 · 实时字幕显示
                   </Text>
                 </Space>
 
@@ -357,9 +395,9 @@ export default function App() {
                   initial={{ scale: 0.9, opacity: 0 }} 
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2, duration: 0.4 }}
-                  style={{ marginTop: 24 }}
+                  style={{ marginTop: 32 }}
                 >
-                  <CallButton onStart={startCall} />
+                  <CallButton onStart={startCall} label="开始对话" />
                 </motion.div>
 
                 {/* Feature Cards */}
@@ -367,63 +405,96 @@ export default function App() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4, duration: 0.5 }}
-                  style={{ marginTop: 48, width: '100%', maxWidth: 800 }}
+                  style={{ marginTop: 64, width: '100%', maxWidth: 840 }}
                 >
-                  <Flex gap={16} wrap="wrap" justify="center">
-                    <Card 
-                      style={{ 
-                        flex: '1 1 200px',
-                        minWidth: 200,
-                        borderRadius: 12,
-                        border: '1px solid rgba(0, 0, 0, 0.06)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
-                      }}
-                      styles={{ body: { padding: 20 } }}
-                    >
-                      <Space direction="vertical" size={8}>
-                        <div style={{ fontSize: 24 }}>🎙️</div>
-                        <Text strong>实时对话</Text>
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          自然流畅的语音交互
-                        </Text>
-                      </Space>
-                    </Card>
-                    <Card 
-                      style={{ 
-                        flex: '1 1 200px',
-                        minWidth: 200,
-                        borderRadius: 12,
-                        border: '1px solid rgba(0, 0, 0, 0.06)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
-                      }}
-                      styles={{ body: { padding: 20 } }}
-                    >
-                      <Space direction="vertical" size={8}>
-                        <div style={{ fontSize: 24 }}>⚡</div>
-                        <Text strong>智能打断</Text>
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          随时打断AI回应
-                        </Text>
-                      </Space>
-                    </Card>
-                    <Card 
-                      style={{ 
-                        flex: '1 1 200px',
-                        minWidth: 200,
-                        borderRadius: 12,
-                        border: '1px solid rgba(0, 0, 0, 0.06)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
-                      }}
-                      styles={{ body: { padding: 20 } }}
-                    >
-                      <Space direction="vertical" size={8}>
-                        <div style={{ fontSize: 24 }}>💬</div>
-                        <Text strong>实时字幕</Text>
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          对话内容实时显示
-                        </Text>
-                      </Space>
-                    </Card>
+                  <Flex gap={20} wrap="wrap" justify="center">
+                    <motion.div whileHover={{ y: -4 }} style={{ flex: '1 1 240px', minWidth: 240 }}>
+                      <Card 
+                        style={{ 
+                          height: '100%',
+                          borderRadius: 16,
+                          border: '1px solid rgba(0, 0, 0, 0.06)',
+                          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+                          transition: 'all 0.3s ease',
+                          background: '#fff'
+                        }}
+                        styles={{ body: { padding: 24 } }}
+                      >
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          <div style={{ 
+                            fontSize: 32, 
+                            marginBottom: 4,
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                          }}>
+                            🎙️
+                          </div>
+                          <Text strong style={{ fontSize: 16, display: 'block' }}>实时对话</Text>
+                          <Text type="secondary" style={{ fontSize: 14, lineHeight: 1.6 }}>
+                            自然流畅的语音交互体验
+                          </Text>
+                        </Space>
+                      </Card>
+                    </motion.div>
+                    <motion.div whileHover={{ y: -4 }} style={{ flex: '1 1 240px', minWidth: 240 }}>
+                      <Card 
+                        style={{ 
+                          height: '100%',
+                          borderRadius: 16,
+                          border: '1px solid rgba(0, 0, 0, 0.06)',
+                          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+                          transition: 'all 0.3s ease',
+                          background: '#fff'
+                        }}
+                        styles={{ body: { padding: 24 } }}
+                      >
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          <div style={{ 
+                            fontSize: 32, 
+                            marginBottom: 4,
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                          }}>
+                            ⚡
+                          </div>
+                          <Text strong style={{ fontSize: 16, display: 'block' }}>智能打断</Text>
+                          <Text type="secondary" style={{ fontSize: 14, lineHeight: 1.6 }}>
+                            随时打断AI回应，精准控制
+                          </Text>
+                        </Space>
+                      </Card>
+                    </motion.div>
+                    <motion.div whileHover={{ y: -4 }} style={{ flex: '1 1 240px', minWidth: 240 }}>
+                      <Card 
+                        style={{ 
+                          height: '100%',
+                          borderRadius: 16,
+                          border: '1px solid rgba(0, 0, 0, 0.06)',
+                          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+                          transition: 'all 0.3s ease',
+                          background: '#fff'
+                        }}
+                        styles={{ body: { padding: 24 } }}
+                      >
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          <div style={{ 
+                            fontSize: 32, 
+                            marginBottom: 4,
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                          }}>
+                            💬
+                          </div>
+                          <Text strong style={{ fontSize: 16, display: 'block' }}>实时字幕</Text>
+                          <Text type="secondary" style={{ fontSize: 14, lineHeight: 1.6 }}>
+                            对话内容同步文字显示
+                          </Text>
+                        </Space>
+                      </Card>
+                    </motion.div>
                   </Flex>
                 </motion.div>
               </Space>
@@ -462,7 +533,9 @@ export default function App() {
         <footer style={{ 
           padding: '24px 32px',
           borderTop: '1px solid rgba(0, 0, 0, 0.06)',
-          background: 'rgba(255, 255, 255, 0.9)'
+          background: 'rgba(255, 255, 255, 0.95)',
+          position: 'relative',
+          zIndex: 1
         }}>
           <Flex justify="center" gap={24}>
             <Button type="link" style={{ color: '#64748b' }}>历史记录</Button>

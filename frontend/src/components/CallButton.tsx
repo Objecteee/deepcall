@@ -12,19 +12,31 @@ type Props = {
 export default function CallButton({ onStart, label = '开始通话', icon }: Props) {
   return (
     <motion.div
-      animate={{ scale: [1, 1.04, 1] }}
-      transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
       style={{ display: 'inline-block' }}
     >
       <Button
         type="primary"
-        shape="circle"
         size="large"
         icon={icon ?? <PhoneFilled />}
         onClick={onStart}
-        style={{ width: 88, height: 88, fontSize: 22, display: 'grid', placeItems: 'center' }}
+        style={{ 
+          height: 56,
+          paddingLeft: 32,
+          paddingRight: 32,
+          fontSize: 16,
+          fontWeight: 600,
+          borderRadius: 28,
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          border: 'none',
+          boxShadow: '0 4px 16px rgba(102, 126, 234, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}
       >
-        {/* no text to keep it minimal like ChatGPT */}
+        {label}
       </Button>
     </motion.div>
   );
