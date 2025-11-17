@@ -69,13 +69,18 @@ export default function App() {
                 type: 'session.update',
                 event_id: eid(),
                 session: {
-                  modalities: ['text', 'audio'],
+                  output_modalities: ['TEXT', 'AUDIO'],
                   voice: sess.realtime?.voice || 'Cherry',
-                  input_audio_format: 'pcm16',
-                  output_audio_format: 'pcm24',
+                  input_audio_format: 'PCM_16000HZ_MONO_16BIT',
+                  output_audio_format: 'PCM_24000HZ_MONO_16BIT',
                   instructions: '请始终用中文回答。',
-                  input_audio_transcription: { language: 'zh' },
-                  turn_detection: { type: 'server_vad', threshold: 0.3, silence_duration_ms: 500, create_response: true, interrupt_response: true },
+                  enable_input_audio_transcription: true,
+                  input_audio_transcription_model: 'gummy-realtime-v1',
+                  enable_turn_detection: true,
+                  turn_detection_type: 'server_vad',
+                  turn_detection_threshold: 0.2,
+                  turn_detection_silence_duration_ms: 800,
+                  smooth_output: true,
                 },
               });
             } else if (msg?.type === 'session.updated') {
