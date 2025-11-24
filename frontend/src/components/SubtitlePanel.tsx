@@ -1,8 +1,32 @@
 import { Card, Typography, Space, Empty } from 'antd';
 import { useCallStore } from '@store/callStore';
 import { useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const { Text } = Typography;
+
+// 自定义代码块渲染
+const CodeBlock = ({ inline, className, children, ...props }: any) => {
+  const match = /language-(\w+)/.exec(className || '');
+  return !inline && match ? (
+    <SyntaxHighlighter
+      style={oneLight}
+      language={match[1]}
+      PreTag="div"
+      customStyle={{ margin: '8px 0', borderRadius: '8px', fontSize: '13px' }}
+      {...props}
+    >
+      {String(children).replace(/\n$/, '')}
+    </SyntaxHighlighter>
+  ) : (
+    <code className={className} style={{ background: 'rgba(0,0,0,0.05)', padding: '2px 4px', borderRadius: 4 }} {...props}>
+      {children}
+    </code>
+  );
+};
 
 export default function SubtitlePanel() {
   const { subtitles } = useCallStore();
@@ -49,12 +73,11 @@ export default function SubtitlePanel() {
         height: '100%',
         width: '100%'
       }}
-      styles={{ 
-        body: { 
+      styles={{
+        body: {
           height: '100%',
-          padding: 0,
-          overflow: 'hidden'
-        } 
+          padding: 0
+        }
       }}
     >
       <div 
@@ -62,9 +85,8 @@ export default function SubtitlePanel() {
         className="chat-scroll"
         style={{ 
           height: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
           padding: 24,
+          overflowY: 'auto'
         }}
       >
         {subtitles.length === 0 ? (
@@ -108,8 +130,13 @@ export default function SubtitlePanel() {
                 >
                   {s.role === 'user' ? '我' : 'AI助手'}
                 </Text>
-                <div className={`bubble ${s.role === 'user' ? 'bubble-user' : 'bubble-assistant'}`}>
-                  {s.text || '...'}
+                <div className={`bubble ${s.role === 'user' ? 'bubble-user' : 'bubble-assistant'} markdown-content`}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{ code: CodeBlock }}
+                  >
+                    {s.text || '...'}
+                  </ReactMarkdown>
                   {!s.isComplete && (
                     <span className="typing-indicator">▊</span>
                   )}

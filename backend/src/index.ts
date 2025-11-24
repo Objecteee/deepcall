@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import sessionRouter from './routes/session';
 import logsRouter from './routes/logs';
+import chatRouter from './routes/chat';
 import http from 'http';
 import { setupWsProxy } from './ws/proxy';
 
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/session', sessionRouter);
 app.use('/logs', logsRouter);
+app.use('/chat', chatRouter);
 
 // 接收前端发送的屏幕共享帧（base64 JPEG）
 // 后续可以在这里衔接 Qwen-Omni 的 append_video 能力

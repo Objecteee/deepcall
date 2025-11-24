@@ -10,10 +10,14 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.6",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "antd": "^5.19.2",
     "framer-motion": "^11.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -23,4 +27,3 @@
     "vite": "^5.4.8"
   }
 }
-

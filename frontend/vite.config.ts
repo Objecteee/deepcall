@@ -6,6 +6,7 @@ export default defineConfig({
     proxy: {
       '/session': 'http://localhost:3000',
       '/logs': 'http://localhost:3000',
+      '/chat': 'http://localhost:3000',
       // Enable WS proxying to backend realtime endpoint
       '/realtime': {
         target: 'http://localhost:3000',

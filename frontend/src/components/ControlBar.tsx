@@ -1,5 +1,5 @@
 import { Space, Button, Tooltip, Card } from 'antd';
-import { AudioMutedOutlined, PhoneOutlined, ThunderboltOutlined, DesktopOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { AudioMutedOutlined, PhoneOutlined, DesktopOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { useCallStore } from '@store/callStore';
 
 type Props = {
@@ -8,13 +8,25 @@ type Props = {
   onToggleScreenShare?: () => void;
   // 当前是否处于屏幕共享中，用于高亮按钮
   isScreenSharing?: boolean;
+  // 静音开关回调
+  onToggleMute?: () => void;
+  // 当前麦克风是否静音
+  isMuted?: boolean;
   // 摄像头开关回调
   onToggleCamera?: () => void;
   // 当前摄像头状态
   isCameraOn?: boolean;
 };
 
-export default function ControlBar({ onHangup, onToggleScreenShare, isScreenSharing, onToggleCamera, isCameraOn }: Props) {
+export default function ControlBar({
+  onHangup,
+  onToggleScreenShare,
+  isScreenSharing,
+  onToggleCamera,
+  isCameraOn,
+  onToggleMute,
+  isMuted,
+}: Props) {
   const { status, setStatus } = useCallStore();
   const isActive = status !== 'idle' && status !== 'ended';
 
@@ -22,11 +34,19 @@ export default function ControlBar({ onHangup, onToggleScreenShare, isScreenShar
     <div className="floating-controls">
       <Card className="glass-card" size="small" styles={{ body: { padding: 10 } }}>
         <Space align="center">
-          <Tooltip title="静音">
-            <Button shape="circle" size="large" icon={<AudioMutedOutlined />} disabled={!isActive} />
-          </Tooltip>
-          <Tooltip title="打断">
-            <Button shape="circle" size="large" icon={<ThunderboltOutlined />} disabled={!isActive} />
+          <Tooltip title={isMuted ? '取消静音' : '静音麦克风'}>
+            <Button
+              shape="circle"
+              size="large"
+              icon={<AudioMutedOutlined />}
+              type={isMuted ? 'primary' : 'default'}
+              disabled={!isActive}
+              onClick={() => {
+                if (onToggleMute) {
+                  onToggleMute();
+                }
+              }}
+            />
           </Tooltip>
           <Tooltip title={isCameraOn ? '关闭摄像头' : '打开摄像头'}>
             <Button

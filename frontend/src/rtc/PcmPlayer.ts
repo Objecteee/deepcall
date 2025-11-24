@@ -3,11 +3,17 @@ export class Pcm24Player {
   private queueTime = 0;
   private sampleRate = 24000; // default to 24 kHz per Qwen Omni docs
   private activeSources: AudioBufferSourceNode[] = []; // Track all playing sources
+  // 对外暴露的 Analyser，用于可视化
+  public analyser: AnalyserNode | null = null;
 
   private async ensure() {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       await this.ctx.resume();
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 256; // 可视化所需的采样窗口大小
+      // 将 Analyser 连接到 Destination，这样后续 Source -> Analyser -> Destination
+      this.analyser.connect(this.ctx.destination);
       this.queueTime = this.ctx.currentTime;
     }
   }
@@ -59,7 +65,12 @@ export class Pcm24Player {
     ch0.set(floats);
     const src = this.ctx!.createBufferSource();
     src.buffer = buffer;
-    src.connect(this.ctx!.destination);
+    // 连接链路：Source -> Analyser -> Destination
+    if (this.analyser) {
+      src.connect(this.analyser);
+    } else {
+      src.connect(this.ctx!.destination);
+    }
     const startAt = Math.max(this.ctx!.currentTime, this.queueTime);
     src.start(startAt);
     this.queueTime = startAt + buffer.duration;

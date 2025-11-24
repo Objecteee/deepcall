@@ -3,6 +3,20 @@
   --glass-border: rgba(255, 255, 255, 0.4);
 }
 
+/* 让 React 根节点占满视口高度，便于用 flex 做“footer 吸底”布局 */
+/* html,
+body,
+#root {
+  height: 100%;
+} */
+
+/* 主界面滚动策略：禁止左右滚动，允许上下滚动（使用浏览器默认纵向滚动条） */
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
 /* Glass card effect */
 .glass-card {
   background: var(--glass-bg);
