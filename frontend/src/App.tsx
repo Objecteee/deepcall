@@ -31,6 +31,10 @@ export default function App() {
   const isAiSpeakingRef = useRef(false); // 跟踪AI是否正在说话
   const currentResponseIdRef = useRef<string | null>(null); // 当前响应ID
   const shouldIgnoreAudioRef = useRef(false); // 是否应该忽略音频（打断后）
+  // 屏幕共享相关状态
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const screenCaptureTimerRef = useRef<number | null>(null);
 
   const statusInfo = useMemo(() => {
     switch (status) {
@@ -48,6 +52,153 @@ export default function App() {
         return { text: '已结束', color: 'default' as const };
     }
   }, [status]);
+
+  // 停止屏幕共享：清理定时器与媒体流
+  const stopScreenShare = () => {
+    if (screenCaptureTimerRef.current != null) {
+      window.clearInterval(screenCaptureTimerRef.current);
+      screenCaptureTimerRef.current = null;
+    }
+
+    const stream = screenStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
+    }
+    screenStreamRef.current = null;
+    setIsScreenSharing(false);
+  };
+
+  // 开关屏幕共享
+  async function toggleScreenShare() {
+    if (isScreenSharing) {
+      // 已在共享，点击则停止
+      stopScreenShare();
+      message.success('已停止屏幕共享');
+      return;
+    }
+
+    try {
+      // 与麦克风一样，屏幕共享也需要安全上下文（HTTPS / localhost）
+      const isSecureContext =
+        window.isSecureContext ||
+        location.protocol === 'https:' ||
+        location.hostname === 'localhost' ||
+        location.hostname === '127.0.0.1';
+
+      if (!isSecureContext) {
+        message.error({
+          content: '屏幕共享需要在 HTTPS 或 localhost 环境下使用，请通过 HTTPS 访问应用。',
+          duration: 6,
+        });
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        message.error('当前浏览器不支持屏幕共享（getDisplayMedia 不可用）');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          frameRate: { ideal: 2, max: 5 },
+        },
+        audio: false,
+      } as MediaStreamConstraints);
+
+      if (!stream) {
+        message.error('未获取到屏幕共享流');
+        return;
+      }
+
+      screenStreamRef.current = stream;
+      setIsScreenSharing(true);
+
+      // 创建离屏 video/canvas 用于抽帧
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      // 部分浏览器需要 playsInline 才能在非全屏环境正常播放
+      (video as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+
+      // 尝试开始播放，但不阻塞后续逻辑
+      void video.play().catch(() => {});
+
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings ? track.getSettings() : {};
+      const targetWidth = Math.min((settings.width as number | undefined) || 1280, 1280);
+      const targetHeight =
+        (settings.height && settings.width
+          ? Math.round(((settings.height as number) / (settings.width as number)) * targetWidth)
+          : 720);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        message.error('浏览器不支持 Canvas，无法进行屏幕共享编码');
+        stopScreenShare();
+        return;
+      }
+
+      const captureAndSendFrame = () => {
+        if (!screenStreamRef.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          return;
+        }
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return;
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const result = reader.result;
+                if (typeof result !== 'string') return;
+                const base64 = result.split(',')[1] || '';
+                if (!base64) return;
+
+                // 根据官方文档：图片/视频帧需通过 input_image_buffer.append 事件发送到缓冲区
+                // 事件在 VAD 模式下会与 input_audio_buffer.append 一起用于多模态推理
+                wsRef.current?.sendJson({
+                  type: 'input_image_buffer.append',
+                  event_id: eid(),
+                  image: base64,
+                });
+              };
+              reader.readAsDataURL(blob);
+            },
+            'image/jpeg',
+            0.7,
+          );
+        } catch (err) {
+          log('捕获屏幕帧失败', err);
+        }
+      };
+
+      // 控制帧率：默认 1 fps，既满足模型推荐又减轻带宽压力
+      const timerId = window.setInterval(captureAndSendFrame, 1000);
+      screenCaptureTimerRef.current = timerId;
+
+      // 当用户在浏览器 UI 中主动停止共享时，自动同步状态
+      stream.getVideoTracks().forEach((t) => {
+        t.addEventListener('ended', () => {
+          stopScreenShare();
+          message.info('屏幕共享已结束');
+        });
+      });
+
+      message.success('已开始屏幕共享');
+    } catch (err: any) {
+      log('启动屏幕共享失败', err);
+      message.error(err?.message ? `屏幕共享失败：${err.message}` : '屏幕共享失败');
+    }
+  }
 
   async function startCall() {
     try {
@@ -238,8 +389,10 @@ export default function App() {
               setStatus('idle');
               isAiSpeakingRef.current = false;
             } else if (msg?.type === 'error') {
+              // 打印完整错误对象以便排查
+              log('❌ 模型返回错误:', JSON.stringify(msg, null, 2));
               message.error(msg?.error?.message || '模型错误');
-              setStatus('idle');
+              // setStatus('idle'); // 暂时注释掉，避免因为视频帧错误导致通话直接挂断
               isAiSpeakingRef.current = false;
             }
           } catch {}
@@ -259,6 +412,8 @@ export default function App() {
       wsRef.current?.close();
       await streamerRef.current?.stop();
       playerRef.current?.stopAll();
+      // 挂断时确保关闭屏幕共享
+      stopScreenShare();
       // 清理所有refs状态
       sessionReadyRef.current = false;
       isAiSpeakingRef.current = false;
@@ -568,7 +723,13 @@ export default function App() {
       )}
 
       {/* Floating bottom controls (during call) */}
-      {status !== 'idle' && status !== 'ended' && <ControlBar onHangup={hangup} />}
+      {status !== 'idle' && status !== 'ended' && (
+        <ControlBar
+          onHangup={hangup}
+          onToggleScreenShare={toggleScreenShare}
+          isScreenSharing={isScreenSharing}
+        />
+      )}
     </div>
   );
 }
