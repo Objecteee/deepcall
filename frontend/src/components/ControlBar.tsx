@@ -1,5 +1,5 @@
 import { Space, Button, Tooltip, Card } from 'antd';
-import { AudioMutedOutlined, PhoneOutlined, ThunderboltOutlined, DesktopOutlined } from '@ant-design/icons';
+import { AudioMutedOutlined, PhoneOutlined, ThunderboltOutlined, DesktopOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { useCallStore } from '@store/callStore';
 
 type Props = {
@@ -8,9 +8,13 @@ type Props = {
   onToggleScreenShare?: () => void;
   // 当前是否处于屏幕共享中，用于高亮按钮
   isScreenSharing?: boolean;
+  // 摄像头开关回调
+  onToggleCamera?: () => void;
+  // 当前摄像头状态
+  isCameraOn?: boolean;
 };
 
-export default function ControlBar({ onHangup, onToggleScreenShare, isScreenSharing }: Props) {
+export default function ControlBar({ onHangup, onToggleScreenShare, isScreenSharing, onToggleCamera, isCameraOn }: Props) {
   const { status, setStatus } = useCallStore();
   const isActive = status !== 'idle' && status !== 'ended';
 
@@ -23,6 +27,20 @@ export default function ControlBar({ onHangup, onToggleScreenShare, isScreenShar
           </Tooltip>
           <Tooltip title="打断">
             <Button shape="circle" size="large" icon={<ThunderboltOutlined />} disabled={!isActive} />
+          </Tooltip>
+          <Tooltip title={isCameraOn ? '关闭摄像头' : '打开摄像头'}>
+            <Button
+              shape="circle"
+              size="large"
+              icon={<VideoCameraOutlined />}
+              type={isCameraOn ? 'primary' : 'default'}
+              disabled={!isActive}
+              onClick={() => {
+                if (onToggleCamera) {
+                  onToggleCamera();
+                }
+              }}
+            />
           </Tooltip>
           <Tooltip title={isScreenSharing ? '停止屏幕共享' : '开始屏幕共享'}>
             <Button
