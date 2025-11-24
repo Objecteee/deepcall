@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { App as AntdApp, Button, Card, Flex, Typography, Space, Badge } from 'antd';
 import { motion } from 'framer-motion';
 import CallButton from '@components/CallButton';
@@ -35,6 +35,11 @@ export default function App() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenCaptureTimerRef = useRef<number | null>(null);
+  // 摄像头相关状态（用于“与 AI 视频通话”）
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraCaptureTimerRef = useRef<number | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const statusInfo = useMemo(() => {
     switch (status) {
@@ -52,6 +57,23 @@ export default function App() {
         return { text: '已结束', color: 'default' as const };
     }
   }, [status]);
+
+  // 本地预览：当摄像头状态或流变化时，同步到本地预览 <video>
+  useEffect(() => {
+    const videoEl = localVideoRef.current;
+    if (!videoEl) return;
+
+    if (isCameraOn && cameraStreamRef.current) {
+      // 为避免类型冲突，这里使用类型断言
+      (videoEl as HTMLVideoElement & { playsInline?: boolean }).srcObject = cameraStreamRef.current;
+      videoEl.muted = true;
+      (videoEl as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+      void videoEl.play().catch(() => {});
+    } else {
+      // 关闭摄像头或通话结束时，清理预览
+      (videoEl as HTMLVideoElement & { playsInline?: boolean }).srcObject = null;
+    }
+  }, [isCameraOn]);
 
   // 停止屏幕共享：清理定时器与媒体流
   const stopScreenShare = () => {
@@ -72,6 +94,27 @@ export default function App() {
     }
     screenStreamRef.current = null;
     setIsScreenSharing(false);
+  };
+
+  // 停止摄像头：清理定时器与媒体流
+  const stopCamera = () => {
+    if (cameraCaptureTimerRef.current != null) {
+      window.clearInterval(cameraCaptureTimerRef.current);
+      cameraCaptureTimerRef.current = null;
+    }
+
+    const stream = cameraStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore
+        }
+      });
+    }
+    cameraStreamRef.current = null;
+    setIsCameraOn(false);
   };
 
   // 开关屏幕共享
@@ -197,6 +240,129 @@ export default function App() {
     } catch (err: any) {
       log('启动屏幕共享失败', err);
       message.error(err?.message ? `屏幕共享失败：${err.message}` : '屏幕共享失败');
+    }
+  }
+
+  // 开关摄像头，与 AI 进行“视频通话”（AI 看到你的画面）
+  async function toggleCamera() {
+    if (isCameraOn) {
+      // 已打开摄像头，点击则关闭
+      stopCamera();
+      message.success('已关闭摄像头');
+      return;
+    }
+
+    try {
+      const isSecureContext =
+        window.isSecureContext ||
+        location.protocol === 'https:' ||
+        location.hostname === 'localhost' ||
+        location.hostname === '127.0.0.1';
+
+      if (!isSecureContext) {
+        message.error({
+          content: '摄像头访问需要在 HTTPS 或 localhost 环境下使用，请通过 HTTPS 访问应用。',
+          duration: 6,
+        });
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        message.error('当前浏览器不支持摄像头（getUserMedia 不可用）');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          frameRate: { ideal: 15, max: 24 },
+        },
+        audio: false,
+      } as MediaStreamConstraints);
+
+      if (!stream) {
+        message.error('未获取到摄像头视频流');
+        return;
+      }
+
+      cameraStreamRef.current = stream;
+      setIsCameraOn(true);
+
+      // 使用离屏 video + canvas 进行抽帧发送给模型，预览由 useEffect 管理
+      const captureVideo = document.createElement('video');
+      captureVideo.srcObject = stream;
+      captureVideo.muted = true;
+      (captureVideo as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+      void captureVideo.play().catch(() => {});
+
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings ? track.getSettings() : {};
+      const targetWidth = Math.min((settings.width as number | undefined) || 640, 640);
+      const targetHeight =
+        (settings.height && settings.width
+          ? Math.round(((settings.height as number) / (settings.width as number)) * targetWidth)
+          : 360);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        message.error('浏览器不支持 Canvas，无法进行摄像头画面编码');
+        stopCamera();
+        return;
+      }
+
+      const captureAndSendFrame = () => {
+        if (!cameraStreamRef.current || captureVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          return;
+        }
+        try {
+          ctx.drawImage(captureVideo, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return;
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const result = reader.result;
+                if (typeof result !== 'string') return;
+                const base64 = result.split(',')[1] || '';
+                if (!base64) return;
+
+                // 通过 input_image_buffer.append 向 Qwen-Omni 发送摄像头帧
+                wsRef.current?.sendJson({
+                  type: 'input_image_buffer.append',
+                  event_id: eid(),
+                  image: base64,
+                });
+              };
+              reader.readAsDataURL(blob);
+            },
+            'image/jpeg',
+            0.7,
+          );
+        } catch (err) {
+          log('捕获摄像头帧失败', err);
+        }
+      };
+
+      // 同样控制为 1 fps，满足官方建议帧率
+      const timerId = window.setInterval(captureAndSendFrame, 1000);
+      cameraCaptureTimerRef.current = timerId;
+
+      // 当用户在浏览器 UI 中主动关闭摄像头时，自动同步状态
+      stream.getVideoTracks().forEach((t) => {
+        t.addEventListener('ended', () => {
+          stopCamera();
+          message.info('摄像头已关闭');
+        });
+      });
+
+      message.success('已打开摄像头');
+    } catch (err: any) {
+      log('启动摄像头失败', err);
+      message.error(err?.message ? `摄像头打开失败：${err.message}` : '摄像头打开失败');
     }
   }
 
@@ -414,6 +580,8 @@ export default function App() {
       playerRef.current?.stopAll();
       // 挂断时确保关闭屏幕共享
       stopScreenShare();
+      // 挂断时关闭摄像头
+      stopCamera();
       // 清理所有refs状态
       sessionReadyRef.current = false;
       isAiSpeakingRef.current = false;
@@ -706,6 +874,27 @@ export default function App() {
         </div>
       </div>
 
+      {/* 本地摄像头预览：通话中且摄像头打开时显示一个小画面 */}
+      {status !== 'idle' && status !== 'ended' && isCameraOn && (
+        <video
+          ref={localVideoRef}
+          style={{
+            position: 'absolute',
+            bottom: 150,
+            right: 40,
+            width: 200,
+            height: 120,
+            borderRadius: 12,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.45)',
+            backgroundColor: '#000',
+            objectFit: 'cover',
+            zIndex: 5,
+          }}
+          autoPlay
+          muted
+        />
+      )}
+
       {/* Footer Links - Only show when idle */}
       {(status === 'idle' || status === 'ended') && (
         <footer style={{ 
@@ -728,6 +917,8 @@ export default function App() {
           onHangup={hangup}
           onToggleScreenShare={toggleScreenShare}
           isScreenSharing={isScreenSharing}
+          onToggleCamera={toggleCamera}
+          isCameraOn={isCameraOn}
         />
       )}
     </div>
