@@ -9,9 +9,19 @@ if (!DASHSCOPE_API_KEY) {
   console.warn('Warning: DASHSCOPE_API_KEY is not set. Summarization will fail.');
 }
 
+interface HistoryItem {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+interface SummarizeRequestBody {
+  history: HistoryItem[];
+  previousSummary?: string;
+}
+
 router.post('/summarize', async (req, res) => {
   try {
-    const { history, previousSummary } = req.body;
+    const { history, previousSummary } = req.body as SummarizeRequestBody;
 
     if (!history || !Array.isArray(history) || history.length === 0) {
       // 如果没有新对话，直接返回旧摘要（如果有）
@@ -33,7 +43,7 @@ router.post('/summarize', async (req, res) => {
 ${previousSummary || '无'}
 
 【新增对话】：
-${history.map((h: any) => `${h.role === 'user' ? 'User' : 'AI'}: ${h.text}`).join('\n')}
+${history.map((h: HistoryItem) => `${h.role === 'user' ? 'User' : 'AI'}: ${h.text}`).join('\n')}
     `;
 
     // 调用 qwen-turbo (Qwen-Plus 也可以，视预算而定，turbo最便宜)
@@ -63,7 +73,7 @@ ${history.map((h: any) => `${h.role === 'user' ? 'User' : 'AI'}: ${h.text}`).joi
       throw new Error(`API responded with ${response.status}`);
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as { output?: { text?: string } };
     const summary = data?.output?.text || previousSummary || '';
 
     res.json({ summary });

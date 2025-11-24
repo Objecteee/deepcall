@@ -16,7 +16,8 @@
       "@components/*": ["src/components/*"],
       "@store/*": ["src/store/*"],
       "@rtc/*": ["src/rtc/*"],
-      "@utils/*": ["src/utils/*"]
+      "@utils/*": ["src/utils/*"],
+      "@hooks/*": ["src/hooks/*"]
     }
   },
   "include": ["src", "vite-env.d.ts"]

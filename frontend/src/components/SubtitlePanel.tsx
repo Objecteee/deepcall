@@ -66,10 +66,10 @@ export default function SubtitlePanel() {
   return (
     <Card 
       style={{ 
-        borderRadius: 16,
-        border: '1px solid rgba(0, 0, 0, 0.06)',
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-        background: '#fff',
+        borderRadius: 20,
+        border: '1px solid rgba(0, 0, 0, 0.08)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
+        background: 'linear-gradient(to bottom, #fafbfc 0%, #f8f9fa 100%)',
         height: '100%',
         width: '100%'
       }}
@@ -85,8 +85,9 @@ export default function SubtitlePanel() {
         className="chat-scroll"
         style={{ 
           height: '100%',
-          padding: 24,
-          overflowY: 'auto'
+          padding: '28px 24px',
+          overflowY: 'auto',
+          background: 'transparent'
         }}
       >
         {subtitles.length === 0 ? (
@@ -107,7 +108,7 @@ export default function SubtitlePanel() {
             }}
           />
         ) : (
-          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Space direction="vertical" size={20} style={{ width: '100%' }}>
             {subtitles.map((s, i) => (
               <div
                 key={s.timestamp || `subtitle-${i}`}
@@ -115,17 +116,19 @@ export default function SubtitlePanel() {
                   display: 'flex', 
                   flexDirection: 'column',
                   alignItems: s.role === 'user' ? 'flex-end' : 'flex-start',
-                  gap: 6,
-                  animation: 'fadeIn 0.3s ease-in',
+                  gap: 8,
+                  animation: 'fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
                 <Text 
                   type="secondary" 
                   style={{ 
                     fontSize: 12, 
-                    paddingLeft: s.role === 'user' ? 0 : 12,
-                    paddingRight: s.role === 'user' ? 12 : 0,
-                    fontWeight: 500
+                    paddingLeft: s.role === 'user' ? 0 : 16,
+                    paddingRight: s.role === 'user' ? 16 : 0,
+                    fontWeight: 500,
+                    color: s.role === 'user' ? '#667eea' : '#64748b',
+                    letterSpacing: '0.3px'
                   }}
                 >
                   {s.role === 'user' ? '我' : 'AI助手'}
