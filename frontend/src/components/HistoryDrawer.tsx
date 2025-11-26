@@ -1,30 +1,24 @@
 import React, { useState } from 'react';
 import { Drawer, List, Button, Popconfirm, Space, Typography, Badge, Empty, Modal } from 'antd';
-import { HistoryItem } from '../App'; // 暂时从 App 导入，后续可以移到 types
+import { Subtitle } from '@store/callStore';
 
 const { Text } = Typography;
 
-// 为了避免循环依赖，建议将 HistoryItem 定义移到 types/index.ts
-// 这里重新定义一下以解耦
-type HistoryItemType = {
+export type HistoryItem = {
   id: string;
   date: number;
-  subtitles: Array<{
-    role: 'user' | 'assistant';
-    text: string;
-    timestamp?: number;
-  }>;
+  subtitles: Subtitle[];
 };
 
 interface HistoryDrawerProps {
   open: boolean;
   onClose: () => void;
-  historyList: HistoryItemType[];
+  historyList: HistoryItem[];
   onDelete: (id: string) => void;
 }
 
 export default function HistoryDrawer({ open, onClose, historyList, onDelete }: HistoryDrawerProps) {
-  const [selectedHistory, setSelectedHistory] = useState<HistoryItemType | null>(null);
+  const [selectedHistory, setSelectedHistory] = useState<HistoryItem | null>(null);
 
   return (
     <>
@@ -40,7 +34,7 @@ export default function HistoryDrawer({ open, onClose, historyList, onDelete }: 
         ) : (
           <List
             dataSource={historyList}
-            renderItem={(item) => (
+            renderItem={(item: HistoryItem) => (
               <List.Item
                 actions={[
                   <Button
@@ -80,7 +74,7 @@ export default function HistoryDrawer({ open, onClose, historyList, onDelete }: 
                   }
                   description={
                     <Text type="secondary" ellipsis>
-                      {item.subtitles.slice(0, 2).map((s, i) => (
+                      {item.subtitles.slice(0, 2).map((s: Subtitle, i: number) => (
                         <span key={i}>
                           {s.role === 'user' ? '我' : 'AI'}: {s.text}
                           {i < 1 && ' | '}

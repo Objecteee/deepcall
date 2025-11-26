@@ -36,7 +36,7 @@ export default function MemoryModal({
         <Input.TextArea
           rows={6}
           value={content}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
           placeholder="暂无记忆..."
         />
         <Flex justify="flex-end">

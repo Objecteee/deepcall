@@ -1,7 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import { App as AntdApp } from 'antd';
-import { useCallStore } from '@store/callStore';
-import { HistoryItem } from '@types/history';
+import { useCallStore, Subtitle } from '@store/callStore';
+
+export type HistoryItem = {
+  id: string;
+  date: number;
+  subtitles: Subtitle[];
+};
 
 const MEMORY_KEY = 'deepcall_user_summary';
 const HISTORY_KEY = 'deepcall_history';
