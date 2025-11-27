@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "start": "cross-env NODE_ENV=production node dist/index.js",
+    "start:dev": "node dist/index.js",
+    "start:win": "node dist/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "node-fetch": "^3.3.2",
     "https-proxy-agent": "^7.0.4",
+    "node-fetch": "^3.3.2",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
@@ -27,4 +30,3 @@
     "typescript": "^5.6.3"
   }
 }
-

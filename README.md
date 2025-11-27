@@ -142,27 +142,47 @@ cd frontend
 npm run dev
 ```
 
-**方式二：生产环境构建**
+**方式二：生产环境构建（推荐）**
 
 ```bash
-# 构建前端
+# 使用自动化构建脚本
+# Linux/macOS:
+chmod +x build.sh
+./build.sh
+
+# Windows PowerShell:
+.\build.ps1
+
+# 或手动构建
 cd frontend
 npm run build
-
-# 构建后端
 cd ../backend
 npm run build
-
-# 启动后端服务（后端会自动服务前端静态文件）
-npm run start
+cd ..
 ```
 
-### 5️⃣ 访问应用
+### 5️⃣ 启动生产服务器
+
+```bash
+# 方式一：使用启动脚本（推荐）
+# Linux/macOS:
+chmod +x start-production.sh
+./start-production.sh
+
+# Windows PowerShell:
+.\start-production.ps1
+
+# 方式二：手动启动
+cd backend
+npm start
+```
+
+### 6️⃣ 访问应用
 
 打开浏览器访问：
 
-- **开发环境**: http://localhost:5173
-- **生产环境**: http://localhost:3000
+- **开发环境**: http://localhost:5173 (前端) + http://localhost:3000 (后端)
+- **生产环境**: http://localhost:3000 (后端自动托管前端)
 
 ---
 
@@ -216,7 +236,11 @@ deepcall/
 │   └── tsconfig.json
 │
 ├── package.json             # 根项目依赖
-└── README.md                # 本文件
+├── README.md                # 本文件
+├── build.sh                 # Linux/macOS 构建脚本
+├── build.ps1                # Windows 构建脚本
+├── start-production.sh      # Linux/macOS 生产启动脚本
+└── start-production.ps1     # Windows 生产启动脚本
 ```
 
 ---
@@ -281,54 +305,127 @@ deepcall/
 
 ## 🌐 生产环境部署
 
-### 使用 Nginx + HTTPS
+### 方式一：直接运行（适合快速测试）
 
 1. **构建项目**
 ```bash
+# 使用自动化脚本
+./build.sh           # Linux/macOS
+# 或
+.\build.ps1          # Windows
+
+# 手动构建
 cd frontend && npm run build
-cd ../backend && npm run build
+cd ../backend && npm run build && cd ..
 ```
 
-2. **配置 Nginx**
+2. **启动服务**
+```bash
+# 使用启动脚本
+./start-production.sh    # Linux/macOS
+# 或
+.\start-production.ps1   # Windows
+
+# 手动启动
+cd backend
+npm start
+```
+
+3. **访问应用**
+```
+http://localhost:3000
+```
+
+### 方式二：使用 PM2（推荐生产环境）
+
+1. **安装 PM2**
+```bash
+npm install -g pm2
+```
+
+2. **构建并启动**
+```bash
+# 构建项目
+./build.sh  # 或 .\build.ps1
+
+# 使用 PM2 启动
+pm2 start backend/dist/index.js --name deepcall --node-args="--env NODE_ENV=production"
+
+# 查看日志
+pm2 logs deepcall
+
+# 设置开机自启
+pm2 startup
+pm2 save
+```
+
+3. **管理服务**
+```bash
+pm2 status           # 查看状态
+pm2 restart deepcall # 重启
+pm2 stop deepcall    # 停止
+pm2 delete deepcall  # 删除
+```
+
+### 方式三：使用 Nginx + HTTPS（生产推荐）
+
+1. **构建项目**
+```bash
+./build.sh  # 或 .\build.ps1
+```
+
+2. **使用 PM2 启动后端**
+```bash
+cd backend
+pm2 start dist/index.js --name deepcall --node-args="--env NODE_ENV=production"
+pm2 startup
+pm2 save
+```
+
+3. **配置 Nginx**
 ```nginx
 server {
-    listen 443 ssl;
+    listen 80;
+    server_name yourdomain.com;
+    
+    # HTTP 重定向到 HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
     server_name yourdomain.com;
 
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
+    
+    # SSL 优化
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
 
-    # 前端静态文件
+    # 反向代理到后端（后端已托管前端静态文件）
     location / {
-        root /path/to/deepcall/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # 后端 API
-    location /chat/ {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-    }
-
-    # WebSocket 代理
-    location /ws/qwen-omni {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
+        
+        # WebSocket 超时设置
+        proxy_read_timeout 86400;
     }
 }
 ```
 
-3. **使用 systemd 运行后端**
+4. **重启 Nginx**
 ```bash
-sudo systemctl enable deepcall-backend
-sudo systemctl start deepcall-backend
+sudo nginx -t
+sudo systemctl restart nginx
 ```
 
 ---
